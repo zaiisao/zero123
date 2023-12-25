@@ -39,7 +39,7 @@ parser.add_argument(
     required=True,
     help="Path to the object file",
 )
-parser.add_argument("--output_dir", type=str, default="~/.objaverse/hf-objaverse-v1/views_whole_sphere")
+parser.add_argument("--output_dir", type=str, default=None)
 parser.add_argument(
     "--engine", type=str, default="CYCLES", choices=["CYCLES", "BLENDER_EEVEE"]
 )
@@ -174,7 +174,6 @@ def reset_scene() -> None:
     for image in bpy.data.images:
         bpy.data.images.remove(image, do_unlink=True)
 
-
 # load the glb model
 def load_object(object_path: str) -> None:
     """Loads a glb model into the scene."""
@@ -261,6 +260,33 @@ def normalize_scene():
         obj.matrix_world.translation += offset
     bpy.ops.object.select_all(action="DESELECT")
 
+def enable_depth():
+    scene.use_nodes = True
+    tree = scene.node_tree
+    links = tree.links
+
+    # clear default nodes
+    for n in tree.nodes:
+        tree.nodes.remove(n)
+
+    # create input render layer node
+    rl = tree.nodes.new('CompositorNodeRLayers')    
+
+    # create defocus layer
+    d = tree.nodes.new('CompositorNodeDefocus')
+    d.use_zbuffer = True
+
+    # create output node
+    v = tree.nodes.new('CompositorNodeViewer')   
+    v.use_alpha = False
+
+    # Links
+    # links.new(rl.outputs[0], d.inputs[0])  # link Image output to defocus Image
+    # links.new(rl.outputs[2], d.inputs[1]) # link Z-Buffer output to defocus Z
+    # links.new(rl.outputs['Depth'], v.inputs[0]) # link Z to output
+    links.new(rl.outputs['Depth'], v.inputs['Z'])
+    print("Render Layers outputs:", rl.outputs.keys())
+
 
 def save_images(object_file: str) -> None:
     """Saves rendered images of the object in the scene."""
@@ -294,10 +320,20 @@ def save_images(object_file: str) -> None:
         # set camera
         camera = randomize_camera()
 
+        # enable depth
+        enable_depth()
+
         # render the image
         render_path = os.path.join(args.output_dir, object_uid, f"{i:03d}.png")
         scene.render.filepath = render_path
         bpy.ops.render.render(write_still=True)
+
+        # save depth map
+        depth_map_path = os.path.join(args.output_dir, object_uid, f"{i:03d}_depth.npy")
+        pixels = bpy.data.images['Viewer Node'].pixels
+        # copy buffer to numpy array for faster manipulation
+        arr = np.array(pixels)
+        np.save(depth_map_path, arr)
 
         # save camera RT matrix
         RT = get_3x4_RT_matrix_from_blender(camera)

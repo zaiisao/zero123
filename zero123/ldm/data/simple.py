@@ -313,7 +313,7 @@ class ObjaverseData(Dataset):
             target_im = torch.zeros_like(target_im)
             cond_im = torch.zeros_like(cond_im)
 
-        data["image_target"] = target_im
+        data["image_target"] = target_im # JA: We must add data["depth_of_image_target"] which is the control image
         data["image_cond"] = cond_im
         data["T"] = self.get_T(target_RT, cond_RT)
 

@@ -22,6 +22,8 @@ class Args:
     input_models_path: str
     """Path to a json file containing a list of 3D object files"""
 
+    objaverse_folder: str
+
     upload_to_s3: bool = False
     """Whether to upload the rendered images to S3"""
 
@@ -30,7 +32,6 @@ class Args:
 
     num_gpus: int = -1
     """number of gpus to use. -1 means all available gpus"""
-
 
 def worker(
     queue: multiprocessing.JoinableQueue,
@@ -43,7 +44,7 @@ def worker(
         if item is None:
             break
 
-        view_path = os.path.join('.objaverse/hf-objaverse-v1/views_whole_sphere', item.split('/')[-1][:-4])
+        view_path = os.path.join(args.objaverse_folder, 'views_whole_sphere', item.split('/')[-1][:-4])
         if os.path.exists(view_path):
             queue.task_done()
             print('========', item, 'rendered', '========')
@@ -58,7 +59,7 @@ def worker(
             # f" GOMP_CPU_AFFINITY='0-47' OMP_NUM_THREADS=48 OMP_SCHEDULE=STATIC OMP_PROC_BIND=CLOSE "
             f" CUDA_VISIBLE_DEVICES={gpu} "
             f" blender-3.2.2-linux-x64/blender -b -P scripts/blender_script.py --"
-            f" --object_path {item}"
+            f" --object_path {item} --output_dir {os.path.join(args.objaverse_folder, 'views_whole_sphere')}"
         )
         print(command)
         subprocess.run(command, shell=True)
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     model_keys = list(model_paths.keys())
 
     for item in model_keys:
-        queue.put(os.path.join('.objaverse/hf-objaverse-v1', model_paths[item]))
+        queue.put(os.path.join(args.objaverse_folder, model_paths[item]))
 
     # update the wandb count
     if args.log_to_wandb:
