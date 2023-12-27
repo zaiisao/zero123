@@ -30,6 +30,7 @@ from mathutils import Vector, Matrix
 import numpy as np
 
 import bpy
+from mathutils import Vector
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -173,6 +174,7 @@ def reset_scene() -> None:
     for image in bpy.data.images:
         bpy.data.images.remove(image, do_unlink=True)
 
+
 # load the glb model
 def load_object(object_path: str) -> None:
     """Loads a glb model into the scene."""
@@ -259,6 +261,7 @@ def normalize_scene():
         obj.matrix_world.translation += offset
     bpy.ops.object.select_all(action="DESELECT")
 
+
 def save_images(object_file: str) -> None:
     """Saves rendered images of the object in the scene."""
     os.makedirs(args.output_dir, exist_ok=True)
@@ -291,60 +294,16 @@ def save_images(object_file: str) -> None:
         # set camera
         camera = randomize_camera()
 
-        scene.use_nodes = True
-        tree = scene.node_tree
-
-        scene.view_layers["ViewLayer"].use_pass_z = True
-
-        render_layers_node = tree.nodes.new('CompositorNodeRLayers')
-        # map_node = tree.nodes.new("CompositorNodeMapRange")
-        normalize_node = tree.nodes.new("CompositorNodeNormalize")
-        invert_node = tree.nodes.new("CompositorNodeInvert")
-        viewer_node = tree.nodes.new("CompositorNodeViewer")
-        file_output_image_node = tree.nodes.new("CompositorNodeOutputFile")
-        file_output_depth_node = tree.nodes.new("CompositorNodeOutputFile")
-
-        # Configure nodes
-        # image_render_path = os.path.join(args.output_dir, object_uid, f"{i:03d}.png")
-        # depth_render_path = os.path.join(args.output_dir, object_uid, f"{i:03d}_depth.png")
-
-        # file_output_image_node.base_path = image_render_path
-        # file_output_depth_node.base_path = depth_render_path
-
-        # Set base_path to the directory
-        base_path = os.path.join(args.output_dir, object_uid)
-
-        file_output_image_node.base_path = base_path
-        file_output_depth_node.base_path = base_path
-
-        # Configure file_slots to specify file names
-        image_file_name = f"{i:03d}_#.png"
-        depth_file_name = f"{i:03d}_depth_#.png"
-
-        # Assuming you're working with a single slot, 
-        # but you can add more if needed
-        file_output_image_node.file_slots[0].path = image_file_name
-        file_output_depth_node.file_slots[0].path = depth_file_name
-
-        # Link nodes
-        links = tree.links
-
-        # links.new(render_layers_node.outputs['Depth'], map_node.inputs['Value'])
-        # links.new(map_node.outputs['Value'], invert_node.inputs['Color'])
-        links.new(render_layers_node.outputs['Depth'], normalize_node.inputs['Value'])
-        links.new(normalize_node.outputs['Value'], invert_node.inputs['Color'])
-
-        links.new(invert_node.outputs['Color'], viewer_node.inputs['Image'])
-
-        links.new(render_layers_node.outputs['Image'], file_output_image_node.inputs['Image'])
-        links.new(invert_node.outputs['Color'], file_output_depth_node.inputs['Image'])
-
+        # render the image
+        render_path = os.path.join(args.output_dir, object_uid, f"{i:03d}.png")
+        scene.render.filepath = render_path
         bpy.ops.render.render(write_still=True)
 
         # save camera RT matrix
         RT = get_3x4_RT_matrix_from_blender(camera)
         RT_path = os.path.join(args.output_dir, object_uid, f"{i:03d}.npy")
         np.save(RT_path, RT)
+
 
 def download_object(object_url: str) -> str:
     """Download the object and return the path."""
