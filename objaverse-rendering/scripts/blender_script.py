@@ -28,7 +28,7 @@ import uuid
 from typing import Tuple
 from mathutils import Vector, Matrix
 import numpy as np
-
+import glob
 import bpy
 
 parser = argparse.ArgumentParser()
@@ -294,6 +294,9 @@ def save_images(object_file: str) -> None:
         scene.use_nodes = True
         tree = scene.node_tree
 
+        for node in tree.nodes:
+            tree.nodes.remove(node)
+
         scene.view_layers["ViewLayer"].use_pass_z = True
 
         render_layers_node = tree.nodes.new('CompositorNodeRLayers')
@@ -318,8 +321,8 @@ def save_images(object_file: str) -> None:
         file_output_depth_node.base_path = base_path
 
         # Configure file_slots to specify file names
-        image_file_name = f"{i:03d}_#.png"
-        depth_file_name = f"{i:03d}_depth_#.png"
+        image_file_name = f"{i:03d}.png"
+        depth_file_name = f"{i:03d}_depth.png"
 
         # Assuming you're working with a single slot, 
         # but you can add more if needed
@@ -340,6 +343,11 @@ def save_images(object_file: str) -> None:
         links.new(invert_node.outputs['Color'], file_output_depth_node.inputs['Image'])
 
         bpy.ops.render.render(write_still=True)
+
+        for file_path in glob.glob(os.path.join(base_path, "*.png*")):
+            # Construct the new file name by removing the frame number
+            new_file_name = file_path.split('.png')[0] + '.png'
+            os.rename(file_path, new_file_name)
 
         # save camera RT matrix
         RT = get_3x4_RT_matrix_from_blender(camera)
