@@ -284,6 +284,22 @@ class ObjaverseData(Dataset):
         img = Image.fromarray(np.uint8(img[:, :, :3] * 255.))
         return img
 
+    def load_depth_im(self, path):
+        try:
+            depth_img = Image.open(path).convert("RGB")
+        except:
+            print(path)
+            sys.exit()
+
+        depth_tensor_rgb = torchvision.transforms.functional.pil_to_tensor(depth_img)
+        depth_tensor = torchvision.transforms.functional.rgb_to_grayscale(depth_tensor_rgb)
+        depth_min = torch.amin(depth_tensor, dim=[0, 1, 2], keepdim=True)
+        depth_max = torch.amax(depth_tensor, dim=[0, 1, 2], keepdim=True)
+
+        normalized_depth = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
+
+        return normalized_depth
+
     def __getitem__(self, index):
 
         data = {}
@@ -298,24 +314,31 @@ class ObjaverseData(Dataset):
         
         color = [1., 1., 1., 1.]
 
-        try:
-            target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
-            cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
-            target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
-            cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
-        except:
-            # very hacky solution, sorry about this
-            filename = os.path.join(self.root_dir, '692db5f2d3a04bb286cb977a7dba903e_1') # this one we know is valid
-            target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
-            cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
-            target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
-            cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
-            target_im = torch.zeros_like(target_im)
-            cond_im = torch.zeros_like(cond_im)
+        # try:
+        target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
+        cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
+        target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
+        cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
+
+        depth_of_target_im = self.load_depth_im(os.path.join(filename, '%03d_depth.png' % index_target))
+        
+        # JA: I commented this part because it seems like this was used to accommodate for a sloppily-written JSON file.
+        # If we write the JSON file such that all of the model names are valid, this shouldn't ever be a problem.
+        # except:
+        #     # very hacky solution, sorry about this
+        #     filename = os.path.join(self.root_dir, '692db5f2d3a04bb286cb977a7dba903e_1') # this one we know is valid
+        #     target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
+        #     cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
+        #     target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
+        #     cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
+        #     target_im = torch.zeros_like(target_im)
+        #     cond_im = torch.zeros_like(cond_im)
 
         data["image_target"] = target_im # JA: We must add data["depth_of_image_target"] which is the control image
         data["image_cond"] = cond_im
         data["T"] = self.get_T(target_RT, cond_RT)
+
+        data["depth_of_image_target"] = depth_of_target_im
 
         if self.postprocess is not None:
             data = self.postprocess(data)
