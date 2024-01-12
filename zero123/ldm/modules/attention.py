@@ -228,7 +228,8 @@ class SpatialTransformer(nn.Module):
     """
     def __init__(self, in_channels, n_heads, d_head,
                  depth=1, dropout=0., context_dim=None,
-                 disable_self_attn=False):
+                 disable_self_attn=False,
+                 use_checkpoint=True):
         super().__init__()
         self.in_channels = in_channels
         inner_dim = n_heads * d_head
@@ -242,7 +243,7 @@ class SpatialTransformer(nn.Module):
 
         self.transformer_blocks = nn.ModuleList(
             [BasicTransformerBlock(inner_dim, n_heads, d_head, dropout=dropout, context_dim=context_dim,
-                                   disable_self_attn=disable_self_attn)
+                                   disable_self_attn=disable_self_attn, checkpoint=use_checkpoint)
                 for d in range(depth)]
         )
 
