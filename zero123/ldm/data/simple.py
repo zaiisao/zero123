@@ -338,7 +338,7 @@ class ObjaverseData(Dataset):
         data["image_cond"] = cond_im
         data["T"] = self.get_T(target_RT, cond_RT)
 
-        data["depth_of_image_target"] = depth_of_target_im
+        data["hint"] = depth_of_target_im
 
         if self.postprocess is not None:
             data = self.postprocess(data)

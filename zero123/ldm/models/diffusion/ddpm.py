@@ -390,7 +390,7 @@ class DDPM(pl.LightningModule):
         return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
-        for k in self.ucg_training:
+        for k in self.ucg_training: # JA: ucg_training is empty in our experiment
             p = self.ucg_training[k]["p"]
             val = self.ucg_training[k]["val"]
             if val is None:
@@ -523,9 +523,10 @@ class LatentDiffusion(DDPM):
         self.cond_stage_forward = cond_stage_forward
 
         # construct linear projection layer for concatenating image CLIP embedding and RT
-        self.cc_projection = nn.Linear(772, 768)
-        nn.init.eye_(list(self.cc_projection.parameters())[0][:768, :768])
-        nn.init.zeros_(list(self.cc_projection.parameters())[1])
+        self.cc_projection = nn.Linear(772, 768) # JA: Confer to figure 3 of the Zero123 paper
+        nn.init.eye_(list(self.cc_projection.parameters())[0][:768, :768]) # JA: Fills the 2-dimensional input Tensor with the identity matrix
+        nn.init.zeros_(list(self.cc_projection.parameters())[1])    # JA: 0 and 1 indices of parameters has shapes of [768, 772] (weight
+                                                                    # matrix) and [768] (bias) respectively
         self.cc_projection.requires_grad_(True)
         
         self.clip_denoised = False
@@ -722,7 +723,7 @@ class LatentDiffusion(DDPM):
     @torch.no_grad()
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
                   cond_key=None, return_original_cond=False, bs=None, uncond=0.05):
-        x = super().get_input(batch, k)
+        x = super().get_input(batch, k) # JA: k is key and x is the target image
         T = batch['T'].to(memory_format=torch.contiguous_format).float()
         
         if bs is not None:
@@ -732,7 +733,7 @@ class LatentDiffusion(DDPM):
         x = x.to(self.device)
         encoder_posterior = self.encode_first_stage(x)
         z = self.get_first_stage_encoding(encoder_posterior).detach()
-        cond_key = cond_key or self.cond_stage_key
+        cond_key = cond_key or self.cond_stage_key # JA: cond_key is None but cond_stage_key is "image_cond"
         xc = super().get_input(batch, cond_key).to(self.device)
         if bs is not None:
             xc = xc[:bs]
@@ -751,11 +752,11 @@ class LatentDiffusion(DDPM):
             null_prompt = self.get_learned_conditioning([""]).detach()
             cond["c_crossattn"] = [self.cc_projection(torch.cat([torch.where(prompt_mask, null_prompt, clip_emb), T[:, None, :]], dim=-1))]
         cond["c_concat"] = [input_mask * self.encode_first_stage((xc.to(self.device))).mode().detach()]
-        out = [z, cond]
-        if return_first_stage_outputs:
+        out = [z, cond] # JA: z is a tensor, and cond is a dictionary. cond["c_crossattn"] and cond["c_concat"] are lists of one tensor each
+        if return_first_stage_outputs: # JA: This is false in our experiment
             xrec = self.decode_first_stage(z)
             out.extend([x, xrec])
-        if return_original_cond:
+        if return_original_cond: # JA: This is false in our experiment
             out.append(xc)
         return out
 
@@ -859,8 +860,9 @@ class LatentDiffusion(DDPM):
         else:
             return self.first_stage_model.encode(x)
 
-    def shared_step(self, batch, **kwargs):
-        x, c = self.get_input(batch, self.first_stage_key)
+    def shared_step(self, batch, **kwargs): # JA: batch is a dictionary with keys 'image_target', 'image_cond', 'T', and 'hint'
+        x, c = self.get_input(batch, self.first_stage_key)  # JA: self is ControlLDM. x is a tensor of shape [1, 4, 32, 32]. c is a dictionary with keys 'c_crossattn' and 'c_concat'
+                                                            # self.get_input refers to the get_input method defined in the ControlLDM class
         loss = self(x, c)
         return loss
 

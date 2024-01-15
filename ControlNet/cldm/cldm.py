@@ -144,6 +144,10 @@ class ControlNet(nn.Module):
         )
         self.zero_convs = nn.ModuleList([self.make_zero_conv(model_channels)])
 
+        # JA: From https://arxiv.org/pdf/2302.05543.pdf
+        # In particular, we use a tiny network E(·) of four convolution layers with 4 × 4 kernels and 2 × 2 strides (activated by ReLU, using 16, 32, 64, 128,
+        # channels respectively, initialized with Gaussian weights and trained jointly with the full model) to encode an image-space condition c_i into a
+        # feature space conditioning vector c_f as, c_f = E(ci). (4) The conditioning vector c_f is passed into the ControlNet.
         self.input_hint_block = TimestepEmbedSequential(
             conv_nd(dims, hint_channels, 16, 3, padding=1),
             nn.SiLU(),
@@ -309,23 +313,23 @@ class ControlLDM(LatentDiffusion):
 
     def __init__(self, control_stage_config, control_key, only_mid_control, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.control_model = instantiate_from_config(control_stage_config)
-        self.control_key = control_key
+        self.control_model = instantiate_from_config(control_stage_config) # JA: control_model is an object of the ControlNet class
+        self.control_key = control_key # JA: control_key is "hint"
         self.only_mid_control = only_mid_control
         self.control_scales = [1.0] * 13
 
     @torch.no_grad()
-    def get_input(self, batch, k, bs=None, *args, **kwargs):
-        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs)
+    def get_input(self, batch, k, bs=None, *args, **kwargs): # JA: Override get_input of LatentDiffusion (Zero123 version)
+        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: x is a tensor, c is a dict
         control = batch[self.control_key]
         if bs is not None:
             control = control[:bs]
         control = control.to(self.device)
         control = einops.rearrange(control, 'b h w c -> b c h w')
         control = control.to(memory_format=torch.contiguous_format).float()
-        return x, dict(c_crossattn=[c], c_concat=[control])
+        return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_hint=[control])
 
-    def apply_model(self, x_noisy, t, cond, *args, **kwargs):
+    def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion
         assert isinstance(cond, dict)
         diffusion_model = self.model.diffusion_model
 
