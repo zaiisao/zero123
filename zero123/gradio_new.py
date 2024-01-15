@@ -77,22 +77,22 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
     precision_scope = autocast if precision == 'autocast' else nullcontext
     with precision_scope('cuda'):
         with model.ema_scope():
-            c = model.get_learned_conditioning(input_im).tile(n_samples, 1, 1)
-            T = torch.tensor([math.radians(x), math.sin(
+            c = model.get_learned_conditioning(input_im).tile(n_samples, 1, 1)  # JA: c is the image encoded by the CLIP embedder (equivalent to an embedded text prompt)
+            T = torch.tensor([math.radians(x), math.sin(                        # 768 is the dimension of the CLIP image encoding vector
                 math.radians(y)), math.cos(math.radians(y)), z])
-            T = T[None, None, :].repeat(n_samples, 1, 1).to(c.device)
-            c = torch.cat([c, T], dim=-1)
-            c = model.cc_projection(c)
+            T = T[None, None, :].repeat(n_samples, 1, 1).to(c.device) # JA: The shape of T is [B, 1, 4]
+            c = torch.cat([c, T], dim=-1) # JA: Concatenate the last two dimensions of c and T. The result of c has a shape of [B, 1, 772]
+            c = model.cc_projection(c) # JA: c on the left side is the output of the learned linear layer for c on the right side, which is the image plus the relative camera pose
             cond = {}
-            cond['c_crossattn'] = [c]
-            cond['c_concat'] = [model.encode_first_stage((input_im.to(c.device))).mode().detach()
-                                .repeat(n_samples, 1, 1, 1)]
-            if scale != 1.0:
-                uc = {}
+            cond['c_crossattn'] = [c] # JA: In general, the condition to the cross attention layer is the text prompt. If there is no text prompt, we can set the cross attention input to be null encoding vector. It means that the image will be generated randomly
+            cond['c_concat'] = [model.encode_first_stage((input_im.to(c.device))).mode().detach() # JA: The base input image also goes into the concatenation condition
+                                .repeat(n_samples, 1, 1, 1)] # JA: The cross attention input provides a global semantic information to the denoising process, whereas the concatenation input provides a very fine-grained local control to the denoising process.
+            if scale != 1.0: # JA: scale is the guidance scale. If it is not 1, then we need the unconditional condition. In general, unconditional condition is the null tensor
+                uc = {} # JA: uc means unconditional conditioning
                 uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)]
                 uc['c_crossattn'] = [torch.zeros_like(c).to(c.device)]
             else:
-                uc = None
+                uc = None # JA: If the guidance scale is 1, it means it is the pure conditional model. It means that we can ignore the unconditional generation
 
             shape = [4, h // 8, w // 8]
             samples_ddim, _ = sampler.sample(S=ddim_steps,
@@ -360,7 +360,7 @@ def main_run(models, device, cam_vis, return_what,
         y = int(np.round(np.random.uniform(-150.0, 150.0)))
         z = 0.0
 
-    cam_vis.polar_change(x)
+    cam_vis.polar_change(x) # JA: x is theta, y is phi, and z is radius
     cam_vis.azimuth_change(y)
     cam_vis.radius_change(z)
     cam_vis.encode_image(show_in_im1)

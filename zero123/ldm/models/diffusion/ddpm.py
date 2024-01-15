@@ -399,7 +399,7 @@ class DDPM(pl.LightningModule):
                 if self.ucg_prng.choice(2, p=[1-p, p]):
                     batch[k][i] = val
 
-        loss, loss_dict = self.shared_step(batch)
+        loss, loss_dict = self.shared_step(batch) # JA: In order to get data from batch, we need to use get_input function of 
 
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
@@ -523,7 +523,7 @@ class LatentDiffusion(DDPM):
         self.cond_stage_forward = cond_stage_forward
 
         # construct linear projection layer for concatenating image CLIP embedding and RT
-        self.cc_projection = nn.Linear(772, 768) # JA: Confer to figure 3 of the Zero123 paper
+        self.cc_projection = nn.Linear(772, 768) # JA: Modify the original LatentDiffusion class for zero123. Confer to figure 3 of the Zero123 paper
         nn.init.eye_(list(self.cc_projection.parameters())[0][:768, :768]) # JA: Fills the 2-dimensional input Tensor with the identity matrix
         nn.init.zeros_(list(self.cc_projection.parameters())[1])    # JA: 0 and 1 indices of parameters has shapes of [768, 772] (weight
                                                                     # matrix) and [768] (bias) respectively

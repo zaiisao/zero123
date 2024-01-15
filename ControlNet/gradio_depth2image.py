@@ -22,6 +22,15 @@ model.load_state_dict(load_state_dict('./models/control_sd15_depth.pth', locatio
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
 
+def get_cross_attention_input(model, prompt, a_prompt, num_samples):
+    c = model.get_learned_conditioning(input_im).tile(n_samples, 1, 1)  # JA: c is the image encoded by the CLIP embedder (equivalent to an embedded text prompt)
+    T = torch.tensor([math.radians(x), math.sin(                        # 768 is the dimension of the CLIP image encoding vector
+        math.radians(y)), math.cos(math.radians(y)), z])
+    T = T[None, None, :].repeat(n_samples, 1, 1).to(c.device) # JA: The shape of T is [B, 1, 4]
+    c = torch.cat([c, T], dim=-1) # JA: Concatenate the last two dimensions of c and T. The result of c has a shape of [B, 1, 772]
+    c = model.cc_projection(c) # JA: c on the left side is the output of the learned linear layer for c on the right side, which is the image plus the relative camera pose
+
+    return c
 
 def process(input_image, prompt, a_prompt, n_prompt, num_samples, image_resolution, detect_resolution, ddim_steps, guess_mode, strength, scale, seed, eta):
     with torch.no_grad():
@@ -43,9 +52,11 @@ def process(input_image, prompt, a_prompt, n_prompt, num_samples, image_resoluti
 
         if config.save_memory:
             model.low_vram_shift(is_diffusing=False)
+        
+        c = get_cross_attention_input()
 
-        cond = {"c_concat": [control], "c_crossattn": [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
-        un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [model.get_learned_conditioning([n_prompt] * num_samples)]}
+        cond = {"c_concat": [control], "c_crossattn": [c]}
+        un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [c]}
         shape = (4, H // 8, W // 8)
 
         if config.save_memory:

@@ -320,14 +320,22 @@ class ControlLDM(LatentDiffusion):
 
     @torch.no_grad()
     def get_input(self, batch, k, bs=None, *args, **kwargs): # JA: Override get_input of LatentDiffusion (Zero123 version)
-        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: x is a tensor, c is a dict
+        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: get_input of ControlLDM invokes get_input of LatentDiffusion. x is a tensor, c is a dict
         control = batch[self.control_key]
         if bs is not None:
             control = control[:bs]
         control = control.to(self.device)
         control = einops.rearrange(control, 'b h w c -> b c h w')
         control = control.to(memory_format=torch.contiguous_format).float()
-        return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_hint=[control])
+
+        if 'c_concat' in c:
+            # JA: If we want to use both the concat condition and the hint condition, we have to make the
+            # distinction here, resulting in three values in the dictionary to be returned.
+            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_hint=[control])
+        else:
+            # JA: Return the original input values. The original ControlNet code does not differentiate between
+            # hint condition and concat condition.
+            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'])
 
     def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion
         assert isinstance(cond, dict)
@@ -335,12 +343,26 @@ class ControlLDM(LatentDiffusion):
 
         cond_txt = torch.cat(cond['c_crossattn'], 1)
 
-        if cond['c_concat'] is None:
+        # Added by JA: The default ControlNet code passes the hint into the control model as c_concat, even though
+        # it is not a true concat condition. This becomes a problem when using ControlNet to fine-tune a model that
+        # already uses c_concat.
+        cond_hint = cond['c_hint'] if cond['c_hint'] is not None else cond['c_concat']
+
+        if cond_hint is None: # JA: This means there is no control
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
         else:
-            control = self.control_model(x=x_noisy, hint=torch.cat(cond['c_concat'], 1), timesteps=t, context=cond_txt)
+            if cond['c_hint'] and cond['c_concat']:
+                # JA: If c_hint does not exist, then it is assumed that c_concat is the hint. If both c_hint and
+                # c_concat both exist, then c_concat is to be concatenated in the normal manner, with x_noisy which
+                # is seen in the DiffusionWrapper.
+                x = torch.cat([x_noisy] + cond['c_concat'], dim=1)
+            else:
+                # JA: Set x to be the original value, which is x_noisy. This is the default behavior in ControlNet
+                x = x_noisy
+
+            control = self.control_model(x=x, hint=torch.cat(cond_hint, 1), timesteps=t, context=cond_txt)
             control = [c * scale for c, scale in zip(control, self.control_scales)]
-            eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
+            eps = diffusion_model(x=x, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
 
         return eps
 
