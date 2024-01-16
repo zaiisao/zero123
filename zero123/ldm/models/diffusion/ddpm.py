@@ -377,7 +377,7 @@ class DDPM(pl.LightningModule):
         return self.p_losses(x, t, *args, **kwargs)
 
     def get_input(self, batch, k):
-        x = batch[k]
+        x = batch[k] # JA: k is the key (e.g. image_target)
         if len(x.shape) == 3:
             x = x[..., None]
         x = rearrange(x, 'b h w c -> b c h w')
@@ -480,8 +480,8 @@ class DDPM(pl.LightningModule):
         return opt
 
 
-class LatentDiffusion(DDPM):
-    """main class"""
+class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by Zero123. 
+    """main class""" # IT IS A MODIFIED VERSION OF THE STANDARD LATENTDIFFUSION in various places.
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -863,7 +863,7 @@ class LatentDiffusion(DDPM):
     def shared_step(self, batch, **kwargs): # JA: batch is a dictionary with keys 'image_target', 'image_cond', 'T', and 'hint'
         x, c = self.get_input(batch, self.first_stage_key)  # JA: self is ControlLDM. x is a tensor of shape [1, 4, 32, 32]. c is a dictionary with keys 'c_crossattn' and 'c_concat'
                                                             # self.get_input refers to the get_input method defined in the ControlLDM class
-        loss = self(x, c)
+        loss = self(x, c) # JA: self(x, c) calls self.forward(x, c)
         return loss
 
     def forward(self, x, c, *args, **kwargs):

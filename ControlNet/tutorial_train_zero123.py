@@ -48,4 +48,5 @@ trainer = pl.Trainer(gpus=1, precision=32, callbacks=[logger])
 
 
 # Train!
-trainer.fit(model, dataloader)
+trainer.fit(model, dataloader)  # JA: model has a special method called "training_step" used in the training loop
+                                # within PyTorch Lightning. training_step computes the loss of a given batch.

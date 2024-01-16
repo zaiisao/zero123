@@ -289,7 +289,7 @@ class ControlNet(nn.Module):
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
 
-        guided_hint = self.input_hint_block(hint, emb, context)
+        guided_hint = self.input_hint_block(hint, emb, context) # JA: input_input_block is the tiny encoder of the controlnet
 
         outs = []
 
@@ -321,7 +321,7 @@ class ControlLDM(LatentDiffusion):
     @torch.no_grad()
     def get_input(self, batch, k, bs=None, *args, **kwargs): # JA: Override get_input of LatentDiffusion (Zero123 version)
         x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: get_input of ControlLDM invokes get_input of LatentDiffusion. x is a tensor, c is a dict
-        control = batch[self.control_key]
+        control = batch[self.control_key] # JA: control_key is hint
         if bs is not None:
             control = control[:bs]
         control = control.to(self.device)
@@ -335,11 +335,18 @@ class ControlLDM(LatentDiffusion):
         else:
             # JA: Return the original input values. The original ControlNet code does not differentiate between
             # hint condition and concat condition.
-            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'])
+            if type(c) == 'dict':
+                crossattn = c['c_crossattn']
+            else:
+                crossattn = [c]
+
+            return x, dict(c_crossattn=crossattn, c_concat=[control])
+
+        # return x, dict(c_crossattn=[c], c_concat=[control]) # Original commented by JA
 
     def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion
         assert isinstance(cond, dict)
-        diffusion_model = self.model.diffusion_model
+        diffusion_model = self.model.diffusion_model # JA: diffusion_model is the ControlledUnetModel
 
         cond_txt = torch.cat(cond['c_crossattn'], 1)
 
@@ -360,7 +367,7 @@ class ControlLDM(LatentDiffusion):
                 # JA: Set x to be the original value, which is x_noisy. This is the default behavior in ControlNet
                 x = x_noisy
 
-            control = self.control_model(x=x, hint=torch.cat(cond_hint, 1), timesteps=t, context=cond_txt)
+            control = self.control_model(x=x, hint=torch.cat(cond_hint, 1), timesteps=t, context=cond_txt) # JA: the control is the skip connections from the encoding blocks of copied stable diffusion
             control = [c * scale for c, scale in zip(control, self.control_scales)]
             eps = diffusion_model(x=x, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
 
