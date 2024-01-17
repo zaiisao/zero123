@@ -259,7 +259,7 @@ class ObjaverseData(Dataset):
 # of the camera in the world coordinate, we solve
 # 0=RC+T; C =−R^t * T, where R is the camera rotation matrix, T is the camera translation vector.
 # Confer: https://math.stackexchange.com/questions/82602/how-to-find-camera-position-and-rotation-from-a-4x4-matrix
-
+# https://en.wikipedia.org/wiki/Camera_resectioning
     def get_T(self, target_RT, cond_RT):
         R, T = target_RT[:3, :3], target_RT[:, -1]
         T_target = -R.T @ T  #MJ: T_target is the camera position in the world coordinate system
