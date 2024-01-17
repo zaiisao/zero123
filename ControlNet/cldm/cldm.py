@@ -328,21 +328,11 @@ class ControlLDM(LatentDiffusion):
         control = einops.rearrange(control, 'b h w c -> b c h w')
         control = control.to(memory_format=torch.contiguous_format).float()
 
-        if 'c_concat' in c:
-            # JA: If we want to use both the concat condition and the hint condition, we have to make the
-            # distinction here, resulting in three values in the dictionary to be returned.
-            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_control=[control])
-        else:
-            # JA: Return the original input values. The original ControlNet code does not differentiate between
-            # hint condition and concat condition.
-            if type(c) == 'dict':
-                crossattn = c['c_crossattn']
-            else:
-                crossattn = [c]
-
-            return x, dict(c_crossattn=crossattn, c_concat=[control])
-
-        # return x, dict(c_crossattn=[c], c_concat=[control]) # Original commented by JA
+        # JA: c = { c_concat: x } or { c_concat: x, c_crossattn: y } or { c_crossattn: y }
+        # JA: If we want to use both the concat condition and the hint condition, we have to make the
+        # distinction here, resulting in three values in the dictionary to be returned.
+        c['c_control'] = [control]
+        return x, c
 
     def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion; MJ: cond could be uncond
         assert isinstance(cond, dict)

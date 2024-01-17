@@ -303,9 +303,10 @@ class ObjaverseData(Dataset):
         depth_min = torch.amin(depth_tensor, dim=[0, 1, 2], keepdim=True)
         depth_max = torch.amax(depth_tensor, dim=[0, 1, 2], keepdim=True)
 
-        normalized_depth = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
+        normalized_depth_chw = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
+        normalized_depth_hwc = rearrange(normalized_depth_chw, 'c h w -> h w c')
 
-        return normalized_depth
+        return normalized_depth_hwc
 
     def __getitem__(self, index):
 
