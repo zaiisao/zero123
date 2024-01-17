@@ -331,7 +331,7 @@ class ControlLDM(LatentDiffusion):
         if 'c_concat' in c:
             # JA: If we want to use both the concat condition and the hint condition, we have to make the
             # distinction here, resulting in three values in the dictionary to be returned.
-            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_hint=[control])
+            return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'], c_control=[control])
         else:
             # JA: Return the original input values. The original ControlNet code does not differentiate between
             # hint condition and concat condition.
@@ -353,19 +353,21 @@ class ControlLDM(LatentDiffusion):
         # Added by JA: The default ControlNet code passes the hint into the control model as c_concat, even though
         # it is not a true concat condition. This becomes a problem when using ControlNet to fine-tune a model that
         # already uses c_concat.
-        cond_hint = cond['c_hint'] if cond['c_hint'] is not None else cond['c_concat']
+        cond_hint = cond['c_control'] if 'c_control' in cond else None
 
         if cond_hint is None: # JA: This means there is no control
             eps = diffusion_model(x=x_noisy, timesteps=t, context=cond_txt, control=None, only_mid_control=self.only_mid_control)
         else:
-            if cond['c_hint'] and cond['c_concat']:
-                # JA: If c_hint does not exist, then it is assumed that c_concat is the hint. If both c_hint and
+            if self.model.conditioning_key in ['hybrid', 'concat', 'hybrid-adm']:
+                # JA: If c_control does not exist, then it is assumed that c_concat is the hint. If both c_control and
                 # c_concat both exist, then c_concat is to be concatenated in the normal manner, with x_noisy which
                 # is seen in the DiffusionWrapper.
                 x = torch.cat([x_noisy] + cond['c_concat'], dim=1)
-            else:
+            elif self.model.conditioning_key == 'crossattn':
                 # JA: Set x to be the original value, which is x_noisy. This is the default behavior in ControlNet
                 x = x_noisy
+            else:
+                raise NotImplementedError
 
             control = self.control_model(x=x, hint=torch.cat(cond_hint, 1), timesteps=t, context=cond_txt) # JA: the control is the skip connections from the encoding blocks of copied stable diffusion
             control = [c * scale for c, scale in zip(control, self.control_scales)]
