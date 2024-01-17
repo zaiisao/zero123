@@ -78,14 +78,32 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
     with precision_scope('cuda'):
         with model.ema_scope():
             c = model.get_learned_conditioning(input_im).tile(n_samples, 1, 1)  # JA: c is the image encoded by the CLIP embedder (equivalent to an embedded text prompt)
+             #MJ:  model.get_learned_conditioning(input_im) = an encoding vector that captures the essential features of the  image 
+             # = a condensed representation of the image in the form of a one-dimensional  vector; its shape =[768]
             T = torch.tensor([math.radians(x), math.sin(                        # 768 is the dimension of the CLIP image encoding vector
                 math.radians(y)), math.cos(math.radians(y)), z])
+            
+        #MJ: ChatGPT: The new representation (theta, sin(phi), cos(phi), r) does contain all the information necessary to describe a point (theta, phi, r) in 3D space 
+        # in spherical coordinates. The azimuthal angle phi ϕ can be reconstructed from sin(phi) and cos(phi) 
+        # although care must be taken to correctly determine the quadrant of ϕ. Theta and r are directly included,
+        # they correspond one-to-one with their counterparts in the standard spherical coordinates.
+            
+        #Stability and Precision:
+        #      Representing angles in terms of their sine and cosine might also provide numerical stability in certain calculations.
+        #      Trigonometric functions can behave more predictably, especially for small angles, compared to dealing directly with angles.
+        #Specific Algorithmic Requirements:
+
+        #     Certain algorithms might inherently work better with components of vectors (like sin(phi) and cos(phi)
+        #     instead of angles. For instance, in some machine learning models, neural networks might find it easier to process and learn from these normalized values.
+
             T = T[None, None, :].repeat(n_samples, 1, 1).to(c.device) # JA: The shape of T is [B, 1, 4]
             c = torch.cat([c, T], dim=-1) # JA: Concatenate the last two dimensions of c and T. The result of c has a shape of [B, 1, 772]
             c = model.cc_projection(c) # JA: c on the left side is the output of the learned linear layer for c on the right side, which is the image plus the relative camera pose
             cond = {}
             cond['c_crossattn'] = [c] # JA: In general, the condition to the cross attention layer is the text prompt. If there is no text prompt, we can set the cross attention input to be null encoding vector. It means that the image will be generated randomly
             cond['c_concat'] = [model.encode_first_stage((input_im.to(c.device))).mode().detach() # JA: The base input image also goes into the concatenation condition
+            # cond['c_concat']: (B,C,H,W), i.e. an image; Note that c is of shape (B,1,L), where L = 768, that is it is a vector                    
+            #MJ: model.encode_first_stage((input_im.to(c.device)))= [C,H,W]; detach() detaches the tensor from the current computational graph                    
                                 .repeat(n_samples, 1, 1, 1)] # JA: The cross attention input provides a global semantic information to the denoising process, whereas the concatenation input provides a very fine-grained local control to the denoising process.
             if scale != 1.0: # JA: scale is the guidance scale. If it is not 1, then we need the unconditional condition. In general, unconditional condition is the null tensor
                 uc = {} # JA: uc means unconditional conditioning
@@ -94,7 +112,7 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
             else:
                 uc = None # JA: If the guidance scale is 1, it means it is the pure conditional model. It means that we can ignore the unconditional generation
 
-            shape = [4, h // 8, w // 8]
+            shape = [4, h // 8, w // 8]  #MJ: C = 4 refers to the channel dim of the latent space (C=3 is the channel dim in pixel space)
             samples_ddim, _ = sampler.sample(S=ddim_steps,
                                              conditioning=cond,
                                              batch_size=n_samples,
@@ -308,7 +326,7 @@ def preprocess_image(models, input_im, preprocess):
 
     return input_im
 
-
+#MJ: fn = fn=partial(main_run, models, device, cam_vis, 'gen')
 def main_run(models, device, cam_vis, return_what,
              x=0.0, y=0.0, z=0.0,
              raw_im=None, preprocess=True,
@@ -383,6 +401,7 @@ def main_run(models, device, cam_vis, return_what,
         sampler = DDIMSampler(models['turncam'])
         # used_x = -x  # NOTE: Polar makes more sense in Basile's opinion this way!
         used_x = x  # NOTE: Set this way for consistency.
+        
         x_samples_ddim = sample_model(input_im, models['turncam'], sampler, precision, h, w,
                                       ddim_steps, n_samples, scale, ddim_eta, used_x, y, z)
 

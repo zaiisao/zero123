@@ -344,7 +344,9 @@ class DDPM(pl.LightningModule):
     def p_losses(self, x_start, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_out = self.model(x_noisy, t)
+        
+        model_out = self.model(x_noisy, t)   #MJ: self = DDPM:  self.model =UnetModel; 
+        #MJ: Note p_losses() in LatentDiffusion calls apply_model() which in turn calls self.model, rather than directly calling self.model()
 
         loss_dict = {}
         if self.parameterization == "eps":
@@ -385,8 +387,8 @@ class DDPM(pl.LightningModule):
         return x
 
     def shared_step(self, batch):
-        x = self.get_input(batch, self.first_stage_key)
-        loss, loss_dict = self(x)
+        x = self.get_input(batch, self.first_stage_key) #MJ: self is ControlLDM here when using ControlNet; so get_input method of ControlLDM is called
+        loss, loss_dict = self(x)    #MJ:self(x) = DDPM.forward(x)
         return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
@@ -719,10 +721,27 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 
         return fold, unfold, normalization, weighting
 
+ #MJ: he @torch.no_grad() decorator is used to disable gradient calculations in PyTorch. 
+    # It's a global setting that affects all tensor operations within the scope of the function it decorates.
     
-    @torch.no_grad()
+#detach() Method:
+
+# The .detach() method is used on a tensor to create a new tensor that shares the same data but does not require gradients.
+# It effectively detaches the tensor from the computation graph.
+# This is important for operations where you want to prevent changes to gradients or the computation graph, 
+# like when you're working with a tensor
+# that you don't want to be part of gradient calculations in backward passes.
+
+# Using .detach() within @torch.no_grad():
+
+# Even under @torch.no_grad(), tensors that required gradients outside the context manager will still have their requires_grad property set to True.
+# Using .detach() explicitly creates a new tensor that does not require gradients, irrespective of the original tensor's requires_grad setting.
+# This can be useful if the detached tensor is going to be used outside the @torch.no_grad() context, where gradient computation may be active again.
+    
+    @torch.no_grad() #MJ: get_input method is modified from the standard get_input of LatentDiffusion to handle the relative camera pose T
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
                   cond_key=None, return_original_cond=False, bs=None, uncond=0.05):
+        
         x = super().get_input(batch, k) # JA: k is key and x is the target image
         T = batch['T'].to(memory_format=torch.contiguous_format).float()
         
@@ -741,8 +760,8 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 
         # To support classifier-free guidance, randomly drop out only text conditioning 5%, only image conditioning 5%, and both 5%.
         random = torch.rand(x.size(0), device=x.device)
-        prompt_mask = rearrange(random < 2 * uncond, "n -> n 1 1")
-        input_mask = 1 - rearrange((random >= uncond).float() * (random < 3 * uncond).float(), "n -> n 1 1 1")
+        prompt_mask = rearrange(random < 2 * uncond, "n -> n 1 1")  #MJ: uncond = 0.05 = 5%; 0< random < 0.05*2
+        input_mask = 1 - rearrange((random >= uncond).float() * (random < 3 * uncond).float(), "n -> n 1 1 1") # 0.05 < random < 3*0.05
         null_prompt = self.get_learned_conditioning([""])
 
         # z.shape: [8, 4, 64, 64]; c.shape: [8, 1, 768]
@@ -751,8 +770,10 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             clip_emb = self.get_learned_conditioning(xc).detach()
             null_prompt = self.get_learned_conditioning([""]).detach()
             cond["c_crossattn"] = [self.cc_projection(torch.cat([torch.where(prompt_mask, null_prompt, clip_emb), T[:, None, :]], dim=-1))]
+            
         cond["c_concat"] = [input_mask * self.encode_first_stage((xc.to(self.device))).mode().detach()]
         out = [z, cond] # JA: z is a tensor, and cond is a dictionary. cond["c_crossattn"] and cond["c_concat"] are lists of one tensor each
+       
         if return_first_stage_outputs: # JA: This is false in our experiment
             xrec = self.decode_first_stage(z)
             out.extend([x, xrec])
@@ -859,13 +880,18 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
                 return self.first_stage_model.encode(x)
         else:
             return self.first_stage_model.encode(x)
-
+        
+    #MJ: shared_step() is called by training_step() of LatentDiffusion; But Latent Diffusion does not define its own training_step but uses that of its parent DDPM
     def shared_step(self, batch, **kwargs): # JA: batch is a dictionary with keys 'image_target', 'image_cond', 'T', and 'hint'
         x, c = self.get_input(batch, self.first_stage_key)  # JA: self is ControlLDM. x is a tensor of shape [1, 4, 32, 32]. c is a dictionary with keys 'c_crossattn' and 'c_concat'
                                                             # self.get_input refers to the get_input method defined in the ControlLDM class
+
         loss = self(x, c) # JA: self(x, c) calls self.forward(x, c)
+                          # MJ: self(x,c) =  LatentDiffusion.forward(x,c);  ControlLDM does not define forward(x,c) but use that of LatentDiffusion
+
         return loss
 
+    #MJ: called by shared_step(self, batch), which is called by training_step()
     def forward(self, x, c, *args, **kwargs):
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
@@ -875,7 +901,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             if self.shorten_cond_schedule:  # TODO: drop this option
                 tc = self.cond_ids[t].to(self.device)
                 c = self.q_sample(x_start=c, t=tc, noise=torch.randn_like(c.float()))
-        return self.p_losses(x, c, t, *args, **kwargs)
+        return self.p_losses(x, c, t, *args, **kwargs)  #MJ: ==> calls self.apply_model()
 
     def _rescale_annotations(self, bboxes, crop_coordinates):  # TODO: move to dataset
         def rescale_bbox(bbox):
@@ -886,7 +912,8 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             return x0, y0, w, h
 
         return [rescale_bbox(b) for b in bboxes]
-
+    
+    #MJ: apply_model is not defined in the parent class DDPM; it is called by  p_losses(self, x_start, cond, t, noise=None): 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
 
         if isinstance(cond, dict):
@@ -976,9 +1003,9 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
             # stitch crops together
             x_recon = fold(o) / normalization
-
+        #end if hasattr(self, "split_input_params")
         else:
-            x_recon = self.model(x_noisy, t, **cond)
+            x_recon = self.model(x_noisy, t, **cond)  #MJ: self.model= UnetModel or ControledUnetModel
 
         if isinstance(x_recon, tuple) and not return_ids:
             return x_recon[0]
@@ -1003,10 +1030,12 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
         kl_prior = normal_kl(mean1=qt_mean, logvar1=qt_log_variance, mean2=0.0, logvar2=0.0)
         return mean_flat(kl_prior) / np.log(2.0)
 
+    #MJ: called by def self.forward(self, x, c, *args, **kwargs):
     def p_losses(self, x_start, cond, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_output = self.apply_model(x_noisy, t, cond)
+        
+        model_output = self.apply_model(x_noisy, t, cond)  #MJ: self.apply_model defined in ControlLDM is used when using ControlNet
 
         loss_dict = {}
         prefix = 'train' if self.training else 'val'

@@ -344,7 +344,7 @@ class ControlLDM(LatentDiffusion):
 
         # return x, dict(c_crossattn=[c], c_concat=[control]) # Original commented by JA
 
-    def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion
+    def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion; MJ: cond could be uncond
         assert isinstance(cond, dict)
         diffusion_model = self.model.diffusion_model # JA: diffusion_model is the ControlledUnetModel
 

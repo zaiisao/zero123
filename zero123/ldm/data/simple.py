@@ -254,9 +254,16 @@ class ObjaverseData(Dataset):
         azimuth = np.arctan2(xyz[:,1], xyz[:,0])
         return np.array([theta, azimuth, z])
 
+#MJ:  matrix TargetRT  is an extrinsic parameter matrix of the kind described in the Wikipedia article;
+# it is a mapping from world coordinates to camera coordinates. So, to find the position C
+# of the camera in the world coordinate, we solve
+# 0=RC+T; C =−R^t * T, where R is the camera rotation matrix, T is the camera translation vector.
+# Confer: https://math.stackexchange.com/questions/82602/how-to-find-camera-position-and-rotation-from-a-4x4-matrix
+# https://en.wikipedia.org/wiki/Camera_resectioning
     def get_T(self, target_RT, cond_RT):
         R, T = target_RT[:3, :3], target_RT[:, -1]
-        T_target = -R.T @ T
+        T_target = -R.T @ T  #MJ: T_target is the camera position in the world coordinate system
+        
 
         R, T = cond_RT[:3, :3], cond_RT[:, -1]
         T_cond = -R.T @ T
