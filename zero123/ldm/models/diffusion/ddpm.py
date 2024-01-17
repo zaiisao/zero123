@@ -880,13 +880,15 @@ class LatentDiffusion(DDPM):
                 return self.first_stage_model.encode(x)
         else:
             return self.first_stage_model.encode(x)
+        
     #MJ: shared_step() is called by training_step() of LatentDiffusion; But Latent Diffusion does not define its own training_step but uses that of its parent DDPM
     def shared_step(self, batch, **kwargs): # JA: batch is a dictionary with keys 'image_target', 'image_cond', 'T', and 'hint'
         x, c = self.get_input(batch, self.first_stage_key)  # JA: self is ControlLDM. x is a tensor of shape [1, 4, 32, 32]. c is a dictionary with keys 'c_crossattn' and 'c_concat'
                                                             # self.get_input refers to the get_input method defined in the ControlLDM class
-        loss = self(x, c)    #MJ:self(x,c) = ControlLDM.forward(x,c) = LatentDiffusion.forward(x,c)
+        loss = self(x, c)    #MJ:self(x,c) =  LatentDiffusion.forward(x,c);  ControlLDM does not define forward(x,c) but use that of LatentDiffusion
         return loss
 
+    #MJ: called by shared_step(self, batch), which is called by training_step()
     def forward(self, x, c, *args, **kwargs):
         t = torch.randint(0, self.num_timesteps, (x.shape[0],), device=self.device).long()
         if self.model.conditioning_key is not None:
@@ -896,7 +898,7 @@ class LatentDiffusion(DDPM):
             if self.shorten_cond_schedule:  # TODO: drop this option
                 tc = self.cond_ids[t].to(self.device)
                 c = self.q_sample(x_start=c, t=tc, noise=torch.randn_like(c.float()))
-        return self.p_losses(x, c, t, *args, **kwargs)
+        return self.p_losses(x, c, t, *args, **kwargs)  #MJ: ==> calls self.apply_model()
 
     def _rescale_annotations(self, bboxes, crop_coordinates):  # TODO: move to dataset
         def rescale_bbox(bbox):
@@ -907,6 +909,7 @@ class LatentDiffusion(DDPM):
             return x0, y0, w, h
 
         return [rescale_bbox(b) for b in bboxes]
+    
     #MJ: apply_model is not defined in the parent class DDPM; it is called by  p_losses(self, x_start, cond, t, noise=None): 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
 
@@ -1024,11 +1027,12 @@ class LatentDiffusion(DDPM):
         kl_prior = normal_kl(mean1=qt_mean, logvar1=qt_log_variance, mean2=0.0, logvar2=0.0)
         return mean_flat(kl_prior) / np.log(2.0)
 
+    #MJ: called by def self.forward(self, x, c, *args, **kwargs):
     def p_losses(self, x_start, cond, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         
-        model_output = self.apply_model(x_noisy, t, cond)
+        model_output = self.apply_model(x_noisy, t, cond)  #MJ: self.apply_model defined in ControlLDM is used when using ControlNet
 
         loss_dict = {}
         prefix = 'train' if self.training else 'val'
