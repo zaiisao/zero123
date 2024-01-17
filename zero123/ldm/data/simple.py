@@ -298,15 +298,17 @@ class ObjaverseData(Dataset):
             print(path)
             sys.exit()
 
-        depth_tensor_rgb = torchvision.transforms.functional.pil_to_tensor(depth_img)
-        depth_tensor = torchvision.transforms.functional.rgb_to_grayscale(depth_tensor_rgb)
+        # depth_tensor_rgb = torchvision.transforms.functional.pil_to_tensor(depth_img)
+        depth_tensor_rgb = self.tform(depth_img)
+        # depth_tensor = torchvision.transforms.functional.rgb_to_grayscale(depth_tensor_rgb)
+        depth_tensor = torch.mean(depth_tensor_rgb, dim=-1, keepdim=True)
         depth_min = torch.amin(depth_tensor, dim=[0, 1, 2], keepdim=True)
         depth_max = torch.amax(depth_tensor, dim=[0, 1, 2], keepdim=True)
 
-        normalized_depth_chw = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
-        normalized_depth_hwc = rearrange(normalized_depth_chw, 'c h w -> h w c')
+        normalized_depth = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
+        # normalized_depth_hwc = rearrange(normalized_depth_chw, 'c h w -> h w c')
 
-        return normalized_depth_hwc
+        return normalized_depth
 
     def __getitem__(self, index):
 
