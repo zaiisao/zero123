@@ -193,6 +193,7 @@ class DDIMSampler(object):
         else:
             x_in = torch.cat([x] * 2)
             t_in = torch.cat([t] * 2)
+            
             if isinstance(c, dict):
                 assert isinstance(unconditional_conditioning, dict)
                 c_in = dict()
@@ -207,7 +208,9 @@ class DDIMSampler(object):
                                 c[k]])
             else:
                 c_in = torch.cat([unconditional_conditioning, c])
+                
             e_t_uncond, e_t = self.model.apply_model(x_in, t_in, c_in).chunk(2)
+            
             e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
 
         if score_corrector is not None:

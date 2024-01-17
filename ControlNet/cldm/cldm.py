@@ -337,7 +337,7 @@ class ControlLDM(LatentDiffusion):
             # hint condition and concat condition.
             return x, dict(c_crossattn=c['c_crossattn'], c_concat=c['c_concat'])
 
-    def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion
+    def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion; MJ: cond could be uncond
         assert isinstance(cond, dict)
         diffusion_model = self.model.diffusion_model
 
