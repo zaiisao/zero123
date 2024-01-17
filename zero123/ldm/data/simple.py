@@ -321,18 +321,17 @@ class ObjaverseData(Dataset):
         
         color = [1., 1., 1., 1.]
 
-        # try:
-        target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
-        cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
-        
-        target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
-        cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
+        try:
+            target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
+            cond_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_cond), color))
+            target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
+            cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
 
-        depth_of_target_im = self.load_depth_im(os.path.join(filename, '%03d_depth.png' % index_target))
-        
+            depth_of_target_im = self.load_depth_im(os.path.join(filename, '%03d_depth.png' % index_target))
+        except:
+            raise FileNotFoundError
         # JA: I commented this part because it seems like this was used to accommodate for a sloppily-written JSON file.
         # If we write the JSON file such that all of the model names are valid, this shouldn't ever be a problem.
-        # except:
         #     # very hacky solution, sorry about this
         #     filename = os.path.join(self.root_dir, '692db5f2d3a04bb286cb977a7dba903e_1') # this one we know is valid
         #     target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))
