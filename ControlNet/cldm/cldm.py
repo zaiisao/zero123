@@ -358,7 +358,8 @@ class ControlLDM(LatentDiffusion):
         else:
             raise NotImplementedError
 
-        if 'c_control' in cond:
+        c_control = cond['c_control'] if 'c_control' in cond else None
+        if c_control is not None:
             control = self.control_model(x=x, hint=torch.cat(cond['c_control'], 1), timesteps=t, context=cond_txt) # JA: the control is the skip connections from the encoding blocks of copied stable diffusion
             control = [c * scale for c, scale in zip(control, self.control_scales)]
         else:
@@ -387,7 +388,10 @@ class ControlLDM(LatentDiffusion):
         n_row = min(z.shape[0], n_row)
         log["reconstruction"] = self.decode_first_stage(z)
         log["control"] = c_cat * 2.0 - 1.0
-        log["conditioning"] = log_txt_as_img((512, 512), batch[self.cond_stage_key], size=16)
+
+        if type(batch[self.cond_stage_key]) == "str":   # If check added by JA
+                                                        # Zero123 does not use text prompts, so we cannot use log_text_as_img
+            log["conditioning"] = log_txt_as_img((512, 512), batch[self.cond_stage_key], size=16)
 
         if plot_diffusion_rows:
             # get diffusion row
@@ -437,7 +441,8 @@ class ControlLDM(LatentDiffusion):
     def sample_log(self, cond, batch_size, ddim, ddim_steps, **kwargs):
         ddim_sampler = DDIMSampler(self)
         b, c, h, w = cond["c_concat"][0].shape
-        shape = (self.channels, h // 8, w // 8)
+        # shape = (self.channels, h // 8, w // 8) # JA: The shape refers to the latent image shape, which is (4, 32, 32). It assumes that h and w are from the size of the pixel space image
+        shape = (self.channels, h, w) # JA: The Zero123 code already encodes the concat image, so we do not divide h and w by 8.
         samples, intermediates = ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
         return samples, intermediates
 

@@ -80,7 +80,7 @@ def load_model_from_config(config, ckpt, device, verbose=False):
 
 @torch.no_grad()
 def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale,
-                 ddim_eta, x, y, z, guess_mode):
+                 ddim_eta, x, y, z, guess_mode): # JA: h, w are each fixed as 256
     precision_scope = autocast if precision == 'autocast' else nullcontext
     with precision_scope('cuda'):
         with model.ema_scope():
@@ -125,13 +125,14 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
 
             if scale != 1.0: # JA: scale is the guidance scale. If it is not 1, then we need the unconditional condition. In general, unconditional condition is the null tensor
                 uc = {} # JA: uc means unconditional conditioning
-                uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)]
+                uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)] # # JA: h, w are each fixed as 256
                 uc['c_crossattn'] = [torch.zeros_like(c).to(c.device)]
                 uc['c_control'] = None if guess_mode else [control]
             else:
                 uc = None # JA: If the guidance scale is 1, it means it is the pure conditional model. It means that we can ignore the unconditional generation
 
-            shape = [4, h // 8, w // 8]  #MJ: C = 4 refers to the channel dim of the latent space (C=3 is the channel dim in pixel space)
+            shape = [4, h // 8, w // 8] # MJ: C = 4 refers to the channel dim of the latent space (C=3 is the channel dim in pixel space)
+                                        # JA: h, w are each fixed as 256
             samples_ddim, _ = sampler.sample(S=ddim_steps,
                                              conditioning=cond,
                                              batch_size=n_samples,

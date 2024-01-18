@@ -738,6 +738,59 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 # Using .detach() explicitly creates a new tensor that does not require gradients, irrespective of the original tensor's requires_grad setting.
 # This can be useful if the detached tensor is going to be used outside the @torch.no_grad() context, where gradient computation may be active again.
     
+    # JA: Original get_input method from vanilla Stable Diffusion is as follows:
+    # @torch.no_grad()
+    # def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
+    #               cond_key=None, return_original_cond=False, bs=None, return_x=False):
+    #     x = super().get_input(batch, k)
+    #     if bs is not None:
+    #         x = x[:bs]
+    #     x = x.to(self.device)
+    #     encoder_posterior = self.encode_first_stage(x)
+    #     z = self.get_first_stage_encoding(encoder_posterior).detach()
+
+    #     if self.model.conditioning_key is not None and not self.force_null_conditioning:
+    #         if cond_key is None:
+    #             cond_key = self.cond_stage_key
+    #         if cond_key != self.first_stage_key:
+    #             if cond_key in ['caption', 'coordinates_bbox', "txt"]:
+    #                 xc = batch[cond_key]
+    #             elif cond_key in ['class_label', 'cls']:
+    #                 xc = batch
+    #             else:
+    #                 xc = super().get_input(batch, cond_key).to(self.device)
+    #         else:
+    #             xc = x
+    #         if not self.cond_stage_trainable or force_c_encode:
+    #             if isinstance(xc, dict) or isinstance(xc, list):
+    #                 c = self.get_learned_conditioning(xc)
+    #             else:
+    #                 c = self.get_learned_conditioning(xc.to(self.device))
+    #         else:
+    #             c = xc
+    #         if bs is not None:
+    #             c = c[:bs]
+
+    #         if self.use_positional_encodings:
+    #             pos_x, pos_y = self.compute_latent_shifts(batch)
+    #             ckey = __conditioning_keys__[self.model.conditioning_key]
+    #             c = {ckey: c, 'pos_x': pos_x, 'pos_y': pos_y}
+
+    #     else:
+    #         c = None
+    #         xc = None
+    #         if self.use_positional_encodings:
+    #             pos_x, pos_y = self.compute_latent_shifts(batch)
+    #             c = {'pos_x': pos_x, 'pos_y': pos_y}
+    #     out = [z, c]
+    #     if return_first_stage_outputs:
+    #         xrec = self.decode_first_stage(z)
+    #         out.extend([x, xrec])
+    #     if return_x:
+    #         out.extend([x])
+    #     if return_original_cond:
+    #         out.append(xc)
+    #     return out
     @torch.no_grad() #MJ: get_input method is modified from the standard get_input of LatentDiffusion to handle the relative camera pose T
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
                   cond_key=None, return_original_cond=False, bs=None, uncond=0.05):
@@ -751,9 +804,9 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 
         x = x.to(self.device)
         encoder_posterior = self.encode_first_stage(x)
-        z = self.get_first_stage_encoding(encoder_posterior).detach()
+        z = self.get_first_stage_encoding(encoder_posterior).detach() # JA: x (1, 3, 256, 256) -> z (1, 4, 32, 32)
         cond_key = cond_key or self.cond_stage_key # JA: cond_key is None but cond_stage_key is "image_cond"
-        xc = super().get_input(batch, cond_key).to(self.device)
+        xc = super().get_input(batch, cond_key).to(self.device) # JA: (1, 3, 256, 256)
         if bs is not None:
             xc = xc[:bs]
         cond = {}

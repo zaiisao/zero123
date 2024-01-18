@@ -214,7 +214,8 @@ class ObjaverseData(Dataset):
         postprocess=None,
         return_paths=False,
         total_view=12,
-        validation=False
+        validation=False,
+        use_target_depth=False
         ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
@@ -227,6 +228,7 @@ class ObjaverseData(Dataset):
             postprocess = instantiate_from_config(postprocess)
         self.postprocess = postprocess
         self.total_view = total_view
+        self.use_target_depth = use_target_depth
 
         if not isinstance(ext, (tuple, list, ListConfig)):
             ext = [ext]
@@ -299,9 +301,9 @@ class ObjaverseData(Dataset):
             sys.exit()
 
         # depth_tensor_rgb = torchvision.transforms.functional.pil_to_tensor(depth_img)
-        depth_tensor_rgb = self.tform(depth_img)
+        depth_tensor = self.tform(depth_img)
         # depth_tensor = torchvision.transforms.functional.rgb_to_grayscale(depth_tensor_rgb)
-        depth_tensor = torch.mean(depth_tensor_rgb, dim=-1, keepdim=True)
+        # depth_tensor = torch.mean(depth_tensor_rgb, dim=-1, keepdim=True)
         depth_min = torch.amin(depth_tensor, dim=[0, 1, 2], keepdim=True)
         depth_max = torch.amax(depth_tensor, dim=[0, 1, 2], keepdim=True)
 
@@ -330,7 +332,8 @@ class ObjaverseData(Dataset):
             target_RT = np.load(os.path.join(filename, '%03d.npy' % index_target))
             cond_RT = np.load(os.path.join(filename, '%03d.npy' % index_cond))
 
-            depth_of_target_im = self.load_depth_im(os.path.join(filename, '%03d_depth.png' % index_target))
+            depth_index = index_target if self.use_target_depth else index_cond
+            depth_of_target_im = self.load_depth_im(os.path.join(filename, '%03d_depth.png' % depth_index))
         except:
             raise FileNotFoundError
         # JA: I commented this part because it seems like this was used to accommodate for a sloppily-written JSON file.
