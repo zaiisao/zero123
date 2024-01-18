@@ -10,13 +10,13 @@ model:
     first_stage_key: "image_target"
     cond_stage_key: "image_cond"
     control_key: "hint" # Added by JA
-    image_size: 32
-    channels: 4
+    image_size: 32 # JA: In the original ControlNet, the original size is 64 but in Objaverse, 512 will be downscaled to 256 and then it will be encoded into the latent space. So the latent space image size will be 32
+    channels: 4 # JA: Channels of the latent image
     cond_stage_trainable: false   # Note: different from the one we trained before
     conditioning_key: hybrid
     monitor: val/loss_simple_ema
     scale_factor: 0.18215
-
+    # use_ema: False # JA: use_ema is deleted from ControlNet config because Zero123 latent diffusion does not use it
     only_mid_control: False # Added by JA
 
     # scheduler_config: # 10000 warmup steps
@@ -31,10 +31,9 @@ model:
     control_stage_config:
       target: cldm.cldm.ControlNet
       params:
-        use_checkpoint: True
         image_size: 32 # unused
-        in_channels: 8
-        hint_channels: 1
+        in_channels: 4
+        hint_channels: 3
         model_channels: 320
         attention_resolutions: [ 4, 2, 1 ]
         num_res_blocks: 2
@@ -46,15 +45,16 @@ model:
                                             # In this config, use_linear_in_transformer is not set in unet_config.
         transformer_depth: 1
         context_dim: 768
+        use_checkpoint: True
         legacy: False
 
     unet_config:
       target: cldm.cldm.ControlledUnetModel #ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
         image_size: 32 # unused
-        in_channels: 8
+        in_channels: 8 # JA: 8 = 4 + 4 = the channels of the latent image to be denoised + channels of the c_concat condition
         out_channels: 4
-        model_channels: 320
+        model_channels: 320 # JA: At the beginning of the input block of the unet, the number of channels changes from 8 to 320
         attention_resolutions: [ 4, 2, 1 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4, 4 ]

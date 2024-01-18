@@ -4,6 +4,9 @@ cd stable-diffusion
 python gradio_new.py 0
 '''
 
+import sys
+sys.path.append("../ControlNet")
+
 import diffusers  # 0.12.1
 import math
 import fire
@@ -14,7 +17,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import rich
-import sys
 import time
 import torch
 from contextlib import nullcontext
