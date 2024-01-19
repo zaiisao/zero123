@@ -334,6 +334,7 @@ class ControlLDM(LatentDiffusion):
         c['c_control'] = [control] # JA: control has a shape of (4, 3, 256, 256)
         return x, c
 
+    #MJ: called by p_losses() which is called by shared_step() which is called by training_step()
     def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion; MJ: cond could be uncond
         assert isinstance(cond, dict) # JA: Here, cond contains cond['c_control']
         diffusion_model = self.model.diffusion_model # JA: diffusion_model is the ControlledUnetModel
@@ -368,12 +369,16 @@ class ControlLDM(LatentDiffusion):
         eps = diffusion_model(x=x, timesteps=t, context=cond_txt, control=control, only_mid_control=self.only_mid_control)
 
         return eps
+    
+    #MJ: In controlNet + zero123, we do not override  get_unconditional_conditioning defined in the zero123 LatentDiffusion
+    
+    # @torch.no_grad()
+    # def get_unconditional_conditioning(self, N):
+    #     return self.get_learned_conditioning([""] * N)
 
-    @torch.no_grad()
-    def get_unconditional_conditioning(self, N):
-        return self.get_learned_conditioning([""] * N)
-
-    @torch.no_grad()
+    #MJ: called by on_train_batch_end() which is called automatically at the end of training_step()
+    ##MJ: log_imgages() of ControlLDM  different from that of zero123 (which in turn a little bit different from LatentDiffusion)
+    @torch.no_grad() 
     def log_images(self, batch, N=4, n_row=2, sample=False, ddim_steps=50, ddim_eta=0.0, return_keys=None,
                    quantize_denoised=True, inpaint=True, plot_denoise_rows=False, plot_progressive_rows=True,
                    plot_diffusion_rows=False, unconditional_guidance_scale=9.0, unconditional_guidance_label=None,
@@ -383,12 +388,22 @@ class ControlLDM(LatentDiffusion):
 
         log = dict()
         z, c = self.get_input(batch, self.first_stage_key, bs=N)
-        c_cat, c = c["c_concat"][0][:N], c["c_crossattn"][0][:N]
+        
+        #MJ: c_cat, c = c["c_concat"][0][:N], c["c_crossattn"][0][:N]; original in ControlLDM
+        c_con, c_cat, c_cross = c["c_control"][0][:N], c["c_concat"][0][:N], c["c_crossattn"][0][:N]
+        #MJ: LDM uses c["c_concat"] to store the control image, but we use it to store the real concat condition,
+        # uses c["c_control"] to store the control image
+        
         N = min(z.shape[0], N)
         n_row = min(z.shape[0], n_row)
         log["reconstruction"] = self.decode_first_stage(z)
-        log["control"] = c_cat * 2.0 - 1.0
-
+        
+        #MJ: log["control"] = c_cat * 2.0 - 1.0 #MJ: [0,1] => [-1,1]; new in ControlLDM
+        log["control"] = c_con * 2.0 - 1.0 
+        #MJ: To run the neuralnet in sampling mode, we need to normalize the control image, because
+        # it is not yet normalized.
+        
+        
         if type(batch[self.cond_stage_key]) == "str":   # If check added by JA
                                                         # Zero123 does not use text prompts, so we cannot use log_text_as_img
             log["conditioning"] = log_txt_as_img((512, 512), batch[self.cond_stage_key], size=16)
@@ -411,11 +426,24 @@ class ControlLDM(LatentDiffusion):
             diffusion_grid = make_grid(diffusion_grid, nrow=diffusion_row.shape[0])
             log["diffusion_row"] = diffusion_grid
 
-        if sample:
+        if sample: #MJ: true in the case of inference stage
             # get denoise row
-            samples, z_denoise_row = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
-                                                     batch_size=N, ddim=use_ddim,
-                                                     ddim_steps=ddim_steps, eta=ddim_eta)
+            
+            # samples, z_denoise_row = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
+            #                                          batch_size=N, ddim=use_ddim,
+            #                                          ddim_steps=ddim_steps, eta=ddim_eta)
+            #MJ:
+            #In our controlNet+ zero123, we use both cond['c_concat'] and cond['c_control']
+            cond = {"c_control": [c_con], "c_concat": [c_cat],"c_crossattn": [c_cross]}
+                                                      
+            samples, z_denoise_row = self.sample_log(cond=cond,
+                                                      batch_size=N, ddim=use_ddim,
+                                                      ddim_steps=ddim_steps, eta=ddim_eta)
+            #MJ: because  unconditional_conditioning=None (which is the case by default) 
+            #    => The pure conditional sample is performed, that is, without using the unconditional sampling direction
+             
+            
+            
             x_samples = self.decode_first_stage(samples)
             log["samples"] = x_samples
             if plot_denoise_rows:
@@ -423,15 +451,39 @@ class ControlLDM(LatentDiffusion):
                 log["denoise_row"] = denoise_grid
 
         if unconditional_guidance_scale > 1.0:
-            uc_cross = self.get_unconditional_conditioning(N) # JA: In our experiment, uc_cross shape is (1, 1, 768). It should be (4, 1, 768)
-            uc_cat = c_cat  # torch.zeros_like(c_cat) # JA: uc_full does not contain c_control
-            uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]}
-            samples_cfg, _ = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
+            
+            #MJ: copied from the zero123 LatentDiffusion:
+            unconditional_guidance_label = ""
+            #MJ: calls get_unconditonal_conditinong() defined in the zero123 LatentDiffusion              
+            uc = self.get_unconditional_conditioning(N, unconditional_guidance_label, image_size=x.shape[-1])
+              
+            #MJ: In our controlNet+ zero123, we use both cond['c_concat'] and cond['c_control']
+            
+            cond = {"c_control": [c_con], "c_concat": [c_cat],"c_crossattn": [c_cross]}                                                    
+                                                      
+            #uc_cross = self.get_unconditional_conditioning(N) # JA: In our experiment, uc_cross shape is (1, 1, 768). It should be (4, 1, 768)
+            #uc_cat = c_cat  # torch.zeros_like(c_cat) # 
+            #MJ: We use cond['c_control'] to store the control image, and cond['c_concat'] to store the real concat condition
+            
+            uc_con = c_con 
+            #uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]} original in ControlLDM
+         
+            # samples_cfg, _ = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
+            #                                  batch_size=N, ddim=use_ddim,
+            #                                  ddim_steps=ddim_steps, eta=ddim_eta,
+            #                                  unconditional_guidance_scale=unconditional_guidance_scale,
+            #                                  unconditional_conditioning=uc_full,
+            #                                  )
+            
+            samples_cfg, _ = self.sample_log(cond=cond, #MJ: cond contains all of the conditions, c_control, c_concat, c_crossattn
                                              batch_size=N, ddim=use_ddim,
                                              ddim_steps=ddim_steps, eta=ddim_eta,
                                              unconditional_guidance_scale=unconditional_guidance_scale,
-                                             unconditional_conditioning=uc_full,
+                                             unconditional_conditioning=uc,  
+                                              #MJ: the unconditional conditioning used for "classifier-free guidance" contains the "unconditional conditions" for only c_concat and c_crossattn
                                              )
+            
+            
             x_samples_cfg = self.decode_first_stage(samples_cfg)
             log[f"samples_cfg_scale_{unconditional_guidance_scale:.2f}"] = x_samples_cfg
 
@@ -440,10 +492,26 @@ class ControlLDM(LatentDiffusion):
     @torch.no_grad()
     def sample_log(self, cond, batch_size, ddim, ddim_steps, **kwargs):
         ddim_sampler = DDIMSampler(self)
-        b, c, h, w = cond["c_concat"][0].shape
-        # shape = (self.channels, h // 8, w // 8) # JA: The shape refers to the latent image shape, which is (4, 32, 32). It assumes that h and w are from the size of the pixel space image
-        shape = (self.channels, h, w) # JA: The Zero123 code already encodes the concat image, so we do not divide h and w by 8.
+        
+        #b, c, h, w = cond["c_concat"][0].shape; original in ControlLDM
+        b, c, h, w = cond["c_control"][0].shape
+        shape = (self.channels, h // 8, w // 8) 
+                
+        #MJ: controlLDM uses: shape = (self.channels, h // 8, w // 8), where h,w are obtained from
+        # cond['c_concat'] which stores the control input in pixel space in controlLDM.
+        
+        #Also, in ControlLDM, cond["c_concat"] contains the control image in the pixel space, whose size =256;
+        #It is because cond["c_concat"] is not used at all in the current ControlLDM implementations.
+        #But, because zero123 uses the real "c_concat" condition, to be concatenated with the latent image,
+        # we created a new field called "c_control" in cond dict and uses "c_concat" for the real concat condition.
+        
+        # Here zero123 uses:  shape = (self.channels, self.image_size, self.image_size), where self.image_size = 32, which is
+        # set in the init of DDPM from the config file; This is the standard method, but the controlLDM author used a hack.
+        # We follow this hackery of ControlLDM in order to prevent confusion.
+        
+        shape = (self.channels, h, w) 
         samples, intermediates = ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
+        #MJ: When   unconditional_conditioning=None (which is the default) => The pure conditional sample is performed, that is, without using the unconditional sampling direction
         return samples, intermediates
 
     def configure_optimizers(self):

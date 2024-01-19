@@ -1339,10 +1339,11 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
         c = repeat(c, '1 ... -> b ...', b=batch_size).to(self.device)
         cond = {}
         cond["c_crossattn"] = [c]
+        #MJ: The following line is different from from the code of the standard LatentDiffusion
         cond["c_concat"] = [torch.zeros([batch_size, 4, image_size // 8, image_size // 8]).to(self.device)]
         return cond
-
-    @torch.no_grad()
+    #MJ: log_imgages() of zero123 is just a little bit different from that of the standard LatentDiffusion
+    @torch.no_grad() 
     def log_images(self, batch, N=8, n_row=4, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
                    quantize_denoised=True, inpaint=True, plot_denoise_rows=False, plot_progressive_rows=True,
                    plot_diffusion_rows=True, unconditional_guidance_scale=1., unconditional_guidance_label=None,
@@ -1357,6 +1358,9 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
                                            force_c_encode=True,
                                            return_original_cond=True,
                                            bs=N)
+        #MJ: In the zero123,  self.get_input() returns  z and c as well as x, xrec, xc;
+        #But in ControlNet, self.get_input() returns  z and c 
+        
         N = min(x.shape[0], N)
         n_row = min(x.shape[0], n_row)
         log["inputs"] = x
@@ -1420,6 +1424,12 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 
         if unconditional_guidance_scale > 1.0:
             uc = self.get_unconditional_conditioning(N, unconditional_guidance_label, image_size=x.shape[-1])
+            
+            #MJ: uc = cond: 
+            #   cond["c_crossattn"] = [c]
+            #   #MJ: The following line is different from from the code of the standard LatentDiffusion
+            #   cond["c_concat"] = [torch.zeros([batch_size, 4, image_size // 8, image_size // 8]).to(self.device)]
+        
             # uc = torch.zeros_like(c)
             with ema_scope("Sampling with classifier-free guidance"):
                 samples_cfg, _ = self.sample_log(cond=c, batch_size=N, ddim=use_ddim,
