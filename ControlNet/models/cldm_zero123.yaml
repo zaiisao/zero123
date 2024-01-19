@@ -10,7 +10,7 @@ model:
     first_stage_key: "image_target"
     cond_stage_key: "image_cond"
     control_key: "hint" # Added by JA
-    image_size: 32 # JA: In the original ControlNet, the original size is 64 but in Objaverse, 512 will be downscaled to 256 and then it will be encoded into the latent space. So the latent space image size will be 32
+    image_size: 32 # JA: In the original ControlNet, the original size is 64 but in Objaverse, it is 32: 512 will be downscaled to 256 and then it will be encoded into the latent space. So the latent space image size will be 32
     channels: 4 # JA: Channels of the latent image
     cond_stage_trainable: false   # Note: different from the one we trained before
     conditioning_key: hybrid
