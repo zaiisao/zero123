@@ -481,7 +481,10 @@ class ControlLDM(LatentDiffusion):
                                              unconditional_guidance_scale=unconditional_guidance_scale,
                                              unconditional_conditioning=uc,  
                                               #MJ: the unconditional conditioning used for "classifier-free guidance" contains the "unconditional conditions" for only c_concat and c_crossattn
-                                             )
+                                             ) 
+                                #MJ: self.sample_log() invokes ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
+                                #which via some steps  invokes  self.model.apply_model(x, t, c), which is defined in ControlLDM,
+                                # where c contains "c_control", "c_concat", "c_crossattn" conditions. 
             
             
             x_samples_cfg = self.decode_first_stage(samples_cfg)
