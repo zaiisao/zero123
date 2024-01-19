@@ -27,7 +27,7 @@ class ControlledUnetModel(UNetModel):
             emb = self.time_embed(t_emb)
             h = x.type(self.dtype)
             for module in self.input_blocks:
-                h = module(h, emb, context)
+                h = module(h, emb, context) # JA: In our experiment context has a batch size of 8 and h a size of 5
                 hs.append(h)
             h = self.middle_block(h, emb, context)
 
@@ -320,22 +320,22 @@ class ControlLDM(LatentDiffusion):
 
     @torch.no_grad()
     def get_input(self, batch, k, bs=None, *args, **kwargs): # JA: Override get_input of LatentDiffusion (Zero123 version)
-        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: get_input of ControlLDM invokes get_input of LatentDiffusion. x is a tensor, c is a dict
+        x, c = super().get_input(batch, self.first_stage_key, *args, **kwargs) # JA: get_input of ControlLDM invokes get_input of LatentDiffusion. x is a tensor (b, 4, 32, 32), c is a dict with c_crossattn (4, 1, 768) and c_concat in the latent space (4, 4, 32, 32)
         control = batch[self.control_key] # JA: control_key is hint
         if bs is not None:
             control = control[:bs]
         control = control.to(self.device)
-        control = einops.rearrange(control, 'b h w c -> b c h w')
+        control = einops.rearrange(control, 'b h w c -> b c h w') # JA: (4, 256, 256, 3) -> (4, 3, 256, 256) (in the pixel space). x is in the latent space
         control = control.to(memory_format=torch.contiguous_format).float()
 
         # JA: c = { c_concat: x } or { c_concat: x, c_crossattn: y } or { c_crossattn: y }
         # JA: If we want to use both the concat condition and the hint condition, we have to make the
         # distinction here, resulting in three values in the dictionary to be returned.
-        c['c_control'] = [control]
+        c['c_control'] = [control] # JA: control has a shape of (4, 3, 256, 256)
         return x, c
 
     def apply_model(self, x_noisy, t, cond, *args, **kwargs): # JA: Override apply_model method of LatentDiffusion; MJ: cond could be uncond
-        assert isinstance(cond, dict)
+        assert isinstance(cond, dict) # JA: Here, cond contains cond['c_control']
         diffusion_model = self.model.diffusion_model # JA: diffusion_model is the ControlledUnetModel
 
         cond_txt = torch.cat(cond['c_crossattn'], 1)
@@ -423,8 +423,8 @@ class ControlLDM(LatentDiffusion):
                 log["denoise_row"] = denoise_grid
 
         if unconditional_guidance_scale > 1.0:
-            uc_cross = self.get_unconditional_conditioning(N)
-            uc_cat = c_cat  # torch.zeros_like(c_cat)
+            uc_cross = self.get_unconditional_conditioning(N) # JA: In our experiment, uc_cross shape is (1, 1, 768). It should be (4, 1, 768)
+            uc_cat = c_cat  # torch.zeros_like(c_cat) # JA: uc_full does not contain c_control
             uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]}
             samples_cfg, _ = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
                                              batch_size=N, ddim=use_ddim,

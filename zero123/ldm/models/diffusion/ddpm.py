@@ -391,7 +391,7 @@ class DDPM(pl.LightningModule):
         loss, loss_dict = self(x)    #MJ:self(x) = DDPM.forward(x)
         return loss, loss_dict
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx): # JA: training_step is defined in DDPM and it is inherited by LatentDiffusion, inherited by ControlLDM
         for k in self.ucg_training: # JA: ucg_training is empty in our experiment
             p = self.ucg_training[k]["p"]
             val = self.ucg_training[k]["val"]

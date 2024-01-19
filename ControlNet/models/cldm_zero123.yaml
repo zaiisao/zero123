@@ -95,9 +95,9 @@ model:
 data:
   target: ldm.data.simple.ObjaverseDataModuleFromConfig
   params:
-    root_dir: '/home/jaehoon/.objaverse/hf-objaverse-v1/views_whole_sphere'
+    root_dir: '/root/.objaverse/hf-objaverse-v1/views_whole_sphere'
     batch_size: 192
-    num_workers: 0 #16
+    num_workers: 255 # 0 #16
     total_view: 4
     train:
       validation: False
