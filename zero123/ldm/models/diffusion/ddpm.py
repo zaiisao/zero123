@@ -26,6 +26,7 @@ from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianD
 from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
 from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ldm.models.diffusion.ddim import DDIMSampler
+
 from ldm.modules.attention import CrossAttention
 
 
@@ -811,7 +812,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             xc = xc[:bs]
         cond = {}
 
-        # To support classifier-free guidance, randomly drop out only text conditioning 5%, only image conditioning 5%, and both 5%.
+        # To support classifier-free guidance, randomly drop out only text conditioning (c_crossattn / image-cond and RT) 5%, only image conditioning (c_concat / image-cond) 5%, and both 5%.
         random = torch.rand(x.size(0), device=x.device)
         prompt_mask = rearrange(random < 2 * uncond, "n -> n 1 1")  #MJ: uncond = 0.05 = 5%; 0< random < 0.05*2
         input_mask = 1 - rearrange((random >= uncond).float() * (random < 3 * uncond).float(), "n -> n 1 1 1") # 0.05 < random < 3*0.05
@@ -1339,7 +1340,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
         c = repeat(c, '1 ... -> b ...', b=batch_size).to(self.device)
         cond = {}
         cond["c_crossattn"] = [c]
-        #MJ: The following line is different from from the code of the standard LatentDiffusion
+        #MJ: Zero123 added the following line, and is not found in the original Stable Diffusion:
         cond["c_concat"] = [torch.zeros([batch_size, 4, image_size // 8, image_size // 8]).to(self.device)]
         return cond
     #MJ: log_imgages() of zero123 is just a little bit different from that of the standard LatentDiffusion

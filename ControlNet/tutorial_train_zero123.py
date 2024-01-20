@@ -15,7 +15,7 @@ from cldm.model import create_model, load_state_dict
 
 
 # Configs
-resume_path = '../ControlNet/models/control-zero123-xl.ckpt'
+resume_path = '../ControlNet/models/control_zero123_105000.ckpt' # '../ControlNet/models/control-zero123-xl.ckpt'
 batch_size = 4
 logger_freq = 300
 learning_rate = 1e-5
@@ -40,7 +40,7 @@ image_transforms = torchvision.transforms.Compose([
 
 # Misc
 dataset = ObjaverseData(
-    "/root/.objaverse/hf-objaverse-v1/views_whole_sphere",
+    "/home/jaehoon/.objaverse/hf-objaverse-v1/views_whole_sphere",
     total_view=4, validation=False, image_transforms=image_transforms)
 dataloader = DataLoader(dataset, num_workers=0, batch_size=batch_size, shuffle=True)
 logger = ImageLogger(batch_frequency=logger_freq)

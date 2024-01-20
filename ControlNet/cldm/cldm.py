@@ -451,22 +451,28 @@ class ControlLDM(LatentDiffusion):
                 log["denoise_row"] = denoise_grid
 
         if unconditional_guidance_scale > 1.0:
-            
+            h, w = c_con.shape[-2], c_con.shape[-1]
             #MJ: copied from the zero123 LatentDiffusion:
-            unconditional_guidance_label = ""
-            #MJ: calls get_unconditonal_conditinong() defined in the zero123 LatentDiffusion              
-            uc = self.get_unconditional_conditioning(N, unconditional_guidance_label, image_size=x.shape[-1])
-              
+            unconditional_guidance_label = [torch.zeros(N, 4, h // 8, w // 8).to(c_con.device)]
+            # MJ: calls get_unconditonal_conditinong() defined in the zero123 LatentDiffusion 
+            # JA: uc_full contains c_concat and c_crossattn conditions
+            uc_full = self.get_unconditional_conditioning(N, unconditional_guidance_label, image_size=c_con.shape[-1])
+            uc_full["c_control"] = [c_con] * N
+
             #MJ: In our controlNet+ zero123, we use both cond['c_concat'] and cond['c_control']
             
-            cond = {"c_control": [c_con], "c_concat": [c_cat],"c_crossattn": [c_cross]}                                                    
+            cond = {
+                "c_control": [c_con],
+                "c_concat": [c_cat],
+                "c_crossattn": [c_cross]
+            }
                                                       
-            #uc_cross = self.get_unconditional_conditioning(N) # JA: In our experiment, uc_cross shape is (1, 1, 768). It should be (4, 1, 768)
-            #uc_cat = c_cat  # torch.zeros_like(c_cat) # 
+            # uc_cross = self.get_unconditional_conditioning(N) # JA: In our experiment, uc_cross shape is (1, 1, 768). It should be (4, 1, 768)
+            # uc_cat = c_cat  # torch.zeros_like(c_cat) # 
             #MJ: We use cond['c_control'] to store the control image, and cond['c_concat'] to store the real concat condition
             
-            uc_con = c_con 
-            #uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]} original in ControlLDM
+            # uc_con = c_con 
+            # uc_full = {"c_concat": [uc_cat], "c_crossattn": [uc_cross]} # original in ControlLDM
          
             # samples_cfg, _ = self.sample_log(cond={"c_concat": [c_cat], "c_crossattn": [c]},
             #                                  batch_size=N, ddim=use_ddim,
@@ -479,7 +485,7 @@ class ControlLDM(LatentDiffusion):
                                              batch_size=N, ddim=use_ddim,
                                              ddim_steps=ddim_steps, eta=ddim_eta,
                                              unconditional_guidance_scale=unconditional_guidance_scale,
-                                             unconditional_conditioning=uc,  
+                                             unconditional_conditioning=uc_full,  
                                               #MJ: the unconditional conditioning used for "classifier-free guidance" contains the "unconditional conditions" for only c_concat and c_crossattn
                                              ) 
                                 #MJ: self.sample_log() invokes ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
@@ -512,7 +518,7 @@ class ControlLDM(LatentDiffusion):
         # set in the init of DDPM from the config file; This is the standard method, but the controlLDM author used a hack.
         # We follow this hackery of ControlLDM in order to prevent confusion.
         
-        shape = (self.channels, h, w) 
+        # shape = (self.channels, h, w) 
         samples, intermediates = ddim_sampler.sample(ddim_steps, batch_size, shape, cond, verbose=False, **kwargs)
         #MJ: When   unconditional_conditioning=None (which is the default) => The pure conditional sample is performed, that is, without using the unconditional sampling direction
         return samples, intermediates

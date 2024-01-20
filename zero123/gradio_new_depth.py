@@ -23,7 +23,9 @@ from contextlib import nullcontext
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 from einops import rearrange
 from functools import partial
-from ldm.models.diffusion.ddim import DDIMSampler
+# from ldm.models.diffusion.ddim import DDIMSampler # Removed by JA: We wish to use the custom DDIMSampler in ControlNet
+from cldm.ddim_hacked import DDIMSampler
+
 from ldm.util import create_carvekit_interface, load_and_preprocess, instantiate_from_config
 from lovely_numpy import lo
 from omegaconf import OmegaConf
