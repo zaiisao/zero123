@@ -81,17 +81,22 @@ def load_model_from_config(config, ckpt, device, verbose=False):
 
 
 @torch.no_grad()
-def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale,
+def sample_model(input_im, depth_map_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale,
                  ddim_eta, x, y, z, guess_mode): # JA: h, w are each fixed as 256
     precision_scope = autocast if precision == 'autocast' else nullcontext
     with precision_scope('cuda'):
         with model.ema_scope():
-            #detected_map, _ = apply_midas(input_im)
-            detected_map, _ = apply_midas(np.transpose(input_im[0].cpu().numpy(), (1, 2, 0)))
-            detected_map = HWC3(detected_map)
-            detected_map = cv2.resize(detected_map, (w, h), interpolation=cv2.INTER_LINEAR)
+            # detected_map, _ = apply_midas(np.transpose(input_im[0].cpu().numpy(), (1, 2, 0)))
+            # detected_map = HWC3(detected_map)
+            # detected_map = cv2.resize(detected_map, (w, h), interpolation=cv2.INTER_LINEAR)
 
-            control = torch.from_numpy(detected_map.copy()).float().cuda() / 255.0
+            depth_map = np.array(depth_map_im.resize(input_im.shape[2:]).convert(mode='RGB'))
+            depth_map = torch.from_numpy(depth_map.copy()).float().cuda()
+
+            depth_min = torch.amin(depth_map, dim=[0, 1, 2], keepdim=True)
+            depth_max = torch.amax(depth_map, dim=[0, 1, 2], keepdim=True)
+
+            control = 2. * (depth_map - depth_min) / (depth_max - depth_min) - 1. # JA: Normalized control image [-1, 1] because in the training, we use the same normalization. This is in contrast to the official ControlNet repo
             control = torch.stack([control for _ in range(n_samples)], dim=0)
             control = rearrange(control, 'b h w c -> b c h w').clone()
 
@@ -130,7 +135,20 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
                 uc = {} # JA: uc means unconditional conditioning
                 uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)] # # JA: h, w are each fixed as 256
                 uc['c_crossattn'] = [torch.zeros_like(c).to(c.device)]
-                uc['c_control'] = None if guess_mode else [control]
+                uc['c_control'] = None if guess_mode else [control] # JA: We will not use guess_mode, so that uc['c_control'] will be [control].
+
+                # JA: From gradio_depth2image.py:
+                #
+                # cond = {"c_concat": [control], "c_crossattn": [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
+                # un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [model.get_learned_conditioning([n_prompt] * num_samples)]}
+                # shape = (4, H // 8, W // 8)
+
+                # JA: From gradio_new.py (zero123 inference):
+                #
+                # uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)]
+                # uc['c_crossattn'] = [torch.zeros_like(c).to(c.device)]
+                # ...
+                # shape = [4, h // 8, w // 8]
             else:
                 uc = None # JA: If the guidance scale is 1, it means it is the pure conditional model. It means that we can ignore the unconditional generation
 
@@ -352,8 +370,8 @@ def preprocess_image(models, input_im, preprocess):
 #MJ: fn = fn=partial(main_run, models, device, cam_vis, 'gen')
 def main_run(models, device, cam_vis, return_what,
              x=0.0, y=0.0, z=0.0,
-             raw_im=None, preprocess=True,
-             scale=3.0, n_samples=4, ddim_steps=50, ddim_eta=1.0, guess_mode=False,
+             raw_im=None, depth_map=None, preprocess=True,
+             scale=3.0, n_samples=4, ddim_steps=50, guess_mode=False, ddim_eta=1.0,
              precision='fp32', h=256, w=256):
     '''
     :param raw_im (PIL Image).
@@ -425,7 +443,7 @@ def main_run(models, device, cam_vis, return_what,
         # used_x = -x  # NOTE: Polar makes more sense in Basile's opinion this way!
         used_x = x  # NOTE: Set this way for consistency.
         
-        x_samples_ddim = sample_model(input_im, models['turncam'], sampler, precision, h, w,
+        x_samples_ddim = sample_model(input_im, depth_map, models['turncam'], sampler, precision, h, w,
                                       ddim_steps, n_samples, scale, ddim_eta, used_x, y, z, guess_mode)
 
         output_ims = []
@@ -509,7 +527,8 @@ def calc_cam_cone_pts_3d(polar_deg, azimuth_deg, radius_m, fov_deg):
 
 def run_demo(
         device_idx=_GPU_INDEX,
-        ckpt='/home/jaehoon/repos/zero123/ControlNet/lightning_logs/version_68/checkpoints/epoch=39-step=6999.ckpt',
+        ckpt='/home/jaehoon/repos/zero123/ControlNet/lightning_logs/version_98/checkpoints/epoch=19-step=12719.ckpt',
+        #ckpt='/home/jaehoon/repos/zero123/ControlNet/lightning_logs/version_70/checkpoints/epoch=35-step=6299.ckpt',
         config='/home/jaehoon/repos/zero123/ControlNet/models/cldm_zero123.yaml'):
 
     print('sys.argv:', sys.argv)
@@ -560,6 +579,8 @@ def run_demo(
 
                 image_block = gr.Image(type='pil', image_mode='RGBA',
                                        label='Input image of single object')
+                depth_block = gr.Image(type='pil', image_mode='RGBA',
+                                       label='Depth image of post-rotation')
                 preprocess_chk = gr.Checkbox(
                     True, label='Preprocess image automatically (remove background and recenter object)')
                 guess_mode = gr.Checkbox(label='Guess Mode', value=False)
@@ -665,17 +686,17 @@ def run_demo(
 
         vis_btn.click(fn=partial(main_run, models, device, cam_vis, 'vis'),
                       inputs=[polar_slider, azimuth_slider, radius_slider,
-                              image_block, preprocess_chk],
+                              image_block, depth_block, preprocess_chk],
                       outputs=[desc_output, vis_output, preproc_output])
 
         run_btn.click(fn=partial(main_run, models, device, cam_vis, 'gen'),
                       inputs=[polar_slider, azimuth_slider, radius_slider,
-                              image_block, preprocess_chk,
+                              image_block, depth_block, preprocess_chk,
                               scale_slider, samples_slider, steps_slider, guess_mode],
                       outputs=[desc_output, vis_output, preproc_output, gen_output])
 
         # NEW:
-        preset_inputs = [image_block, preprocess_chk,
+        preset_inputs = [image_block, depth_block, preprocess_chk,
                          scale_slider, samples_slider, steps_slider, guess_mode]
         preset_outputs = [polar_slider, azimuth_slider, radius_slider,
                           desc_output, vis_output, preproc_output, gen_output]

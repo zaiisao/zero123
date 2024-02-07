@@ -1540,7 +1540,7 @@ class DiffusionWrapper(pl.LightningModule):
         self.conditioning_key = conditioning_key
         assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm']
 
-    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None):
+    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None, c_control=None):
         if self.conditioning_key is None:
             out = self.diffusion_model(x, t)
         elif self.conditioning_key == 'concat':

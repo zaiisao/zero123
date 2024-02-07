@@ -189,6 +189,7 @@ class DDIMSampler(object):
         b, *_, device = *x.shape, x.device
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
+            # JA: If the unconditional_guiding_scale is 1 then we do not use the unconditional output. We only use the conditional output
             e_t = self.model.apply_model(x, t, c)
         else:
             # JA: The following is the approach for sampling with unconditional conditioning in Zero123/SD.

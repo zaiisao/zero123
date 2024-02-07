@@ -95,17 +95,19 @@ model:
 data:
   target: ldm.data.simple.ObjaverseDataModuleFromConfig
   params:
-    root_dir: '/root/.objaverse/hf-objaverse-v1/views_whole_sphere'
-    batch_size: 192
-    num_workers: 255 # 0 #16
+    root_dir: '/home/jaehoon/.objaverse/hf-objaverse-v1/views_whole_sphere'
+    batch_size: 32 #192
+    num_workers: 0 # 0 #16
     total_view: 4
     train:
       validation: False
+      use_target_depth: True
       image_transforms:
         size: 256
 
     validation:
       validation: True
+      use_target_depth: True
       image_transforms:
         size: 256
 
@@ -135,6 +137,6 @@ lightning:
 
   trainer:
     benchmark: True
-    val_check_interval: 5000000 # really sorry
+    val_check_interval: 1 #5000000 # really sorry
     num_sanity_val_steps: 0
     accumulate_grad_batches: 1

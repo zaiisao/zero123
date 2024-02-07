@@ -74,8 +74,14 @@ def load_and_preprocess(interface, input_im):
     image = np.array(image)
     foreground = est_seg[:, : , -1].astype(np.bool_)
     image[~foreground] = [255., 255., 255.]
-    x, y, w, h = cv2.boundingRect(foreground.astype(np.uint8))
-    image = image[y:y+h, x:x+w, :]
+
+    # Commented by JA: We do not want to reposition the object to be in the center in the
+    # ControlNet-finetuned zero123 (because if the object is offset from the center, we want
+    # to keep this information (because the rotation "pivot" takes place at the center of
+    # the image, NOT the center of the (possibly) off-centered object).
+
+    # x, y, w, h = cv2.boundingRect(foreground.astype(np.uint8))
+    # image = image[y:y+h, x:x+w, :]
     image = PIL.Image.fromarray(np.array(image))
     
     # resize image such that long edge is 512
@@ -94,7 +100,7 @@ def log_txt_as_img(wh, xc, size=10):
     for bi in range(b):
         txt = Image.new("RGB", wh, color="white")
         draw = ImageDraw.Draw(txt)
-        font = ImageFont.truetype('data/DejaVuSans.ttf', size=size)
+        font = ImageFont.truetype('font/DejaVuSans.ttf', size=size)
         nc = int(40 * (wh[0] / 256))
         lines = "\n".join(xc[bi][start:start + nc] for start in range(0, len(xc[bi]), nc))
 

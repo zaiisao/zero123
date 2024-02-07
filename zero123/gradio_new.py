@@ -486,7 +486,7 @@ def calc_cam_cone_pts_3d(polar_deg, azimuth_deg, radius_m, fov_deg):
 
 def run_demo(
         device_idx=_GPU_INDEX,
-        ckpt='105000.ckpt',
+        ckpt='/home/jaehoon/repos/zero123/ControlNet/models/zero123-xl.ckpt',
         config='configs/sd-objaverse-finetune-c_concat-256.yaml'):
 
     print('sys.argv:', sys.argv)

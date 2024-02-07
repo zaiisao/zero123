@@ -860,8 +860,10 @@ if __name__ == "__main__":
         # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
         # calling these ourselves should not be necessary but it is.
         # lightning still takes care of proper multiprocessing though
-        data.prepare_data()
-        data.setup()
+
+        data.prepare_data() # JA: In our case, prepare_data and setup are not defined in the child class (i.e. is empty)
+        data.setup() 
+
         rank_zero_print("#### Data ####")
         try:
             for k in data.datasets:

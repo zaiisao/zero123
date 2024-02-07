@@ -31,14 +31,14 @@ class ControlledUnetModel(UNetModel):
                 hs.append(h)
             h = self.middle_block(h, emb, context)
 
-        if control is not None:
+        if control is not None: # JA: If control is not none, add the ControlNet output (at middle block) to the output of the middle block in the UNet
             h += control.pop()
 
         for i, module in enumerate(self.output_blocks):
             if only_mid_control or control is None:
                 h = torch.cat([h, hs.pop()], dim=1)
             else:
-                h = torch.cat([h, hs.pop() + control.pop()], dim=1)
+                h = torch.cat([h, hs.pop() + control.pop()], dim=1) # JA: If the control is not None, get the ControlNet output of the current block and add it to the output of the stable diffusion UNet
             h = module(h, emb, context)
 
         h = h.type(x.dtype)
@@ -399,10 +399,19 @@ class ControlLDM(LatentDiffusion):
         log["reconstruction"] = self.decode_first_stage(z)
         
         #MJ: log["control"] = c_cat * 2.0 - 1.0 #MJ: [0,1] => [-1,1]; new in ControlLDM
-        log["control"] = c_con * 2.0 - 1.0 
+        log["control"] = c_con * 2.0 - 1.0 # JA: ([-1, 1] * 2) - 1 => [-2, 2] - 1 => [-3, 1]
         #MJ: To run the neuralnet in sampling mode, we need to normalize the control image, because
         # it is not yet normalized.
-        
+
+        # import torchvision
+        # for idx in range(N):
+        #     torchvision.utils.save_image(log["reconstruction"][:N][idx], f"image_target_{idx}.png")
+        #     torchvision.utils.save_image(batch['image_cond'][:N][idx].permute(2, 0, 1), f"image_cond_{idx}.png")
+        #     torchvision.utils.save_image(log["control"][idx], f"hint_{idx}.png")
+        #     torchvision.utils.save_image(
+        #         log_txt_as_img((512, 512), str(batch['T'][:N][idx]), size=16),
+        #         f"rotation_{idx}.png"
+        #     )
         
         if type(batch[self.cond_stage_key]) == "str":   # If check added by JA
                                                         # Zero123 does not use text prompts, so we cannot use log_text_as_img
@@ -457,7 +466,7 @@ class ControlLDM(LatentDiffusion):
             # MJ: calls get_unconditonal_conditinong() defined in the zero123 LatentDiffusion 
             # JA: uc_full contains c_concat and c_crossattn conditions
             uc_full = self.get_unconditional_conditioning(N, unconditional_guidance_label, image_size=c_con.shape[-1])
-            uc_full["c_control"] = [c_con] * N
+            uc_full["c_control"] = [c_con] * N # JA: In this case, the c_control value of the uncond is not None. Therefore we do not need the hacked code of apply_model method. This is the case during the training but during the inference we need to use the hacked code of apply_model
 
             #MJ: In our controlNet+ zero123, we use both cond['c_concat'] and cond['c_control']
             
@@ -500,7 +509,7 @@ class ControlLDM(LatentDiffusion):
 
     @torch.no_grad()
     def sample_log(self, cond, batch_size, ddim, ddim_steps, **kwargs):
-        ddim_sampler = DDIMSampler(self)
+        ddim_sampler = DDIMSampler(self) # JA: The sample_log function executes the inference (sampling) of the current network being trained
         
         #b, c, h, w = cond["c_concat"][0].shape; original in ControlLDM
         b, c, h, w = cond["c_control"][0].shape

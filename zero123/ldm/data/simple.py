@@ -201,6 +201,7 @@ class ObjaverseDataModuleFromConfig(pl.LightningDataModule):
         return wds.WebLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
     
     def test_dataloader(self):
+        # JA: Test dataloader uses the validation 
         return wds.WebLoader(ObjaverseData(root_dir=self.root_dir, total_view=self.total_view, validation=self.validation),\
                           batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
@@ -215,7 +216,7 @@ class ObjaverseData(Dataset):
         return_paths=False,
         total_view=12,
         validation=False,
-        use_target_depth=False
+        use_target_depth=True
         ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
@@ -238,9 +239,12 @@ class ObjaverseData(Dataset):
             
         total_objects = len(self.paths)
         if validation:
-            self.paths = self.paths[math.floor(total_objects / 100. * 99.):] # used last 1% as validation
+            # JA: For ControlNet fine-tuning, we will use a split of 90/10
+            self.paths = self.paths[math.floor(total_objects / 100. * 90.):]
+            # self.paths = self.paths[math.floor(total_objects / 100. * 99.):] # used last 1% as validation
         else:
-            self.paths = self.paths[:math.floor(total_objects / 100. * 99.)] # used first 99% as training
+            self.paths = self.paths[:math.floor(total_objects / 100. * 90.)]
+            # self.paths = self.paths[:math.floor(total_objects / 100. * 99.)] # used first 99% as training
         print('============= length of dataset %d =============' % len(self.paths))
         self.tform = image_transforms
 
@@ -307,7 +311,7 @@ class ObjaverseData(Dataset):
         depth_min = torch.amin(depth_tensor, dim=[0, 1, 2], keepdim=True)
         depth_max = torch.amax(depth_tensor, dim=[0, 1, 2], keepdim=True)
 
-        normalized_depth = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1.
+        normalized_depth = 2. * (depth_tensor - depth_min) / (depth_max - depth_min) - 1. # JA: Normalized depth to [-1, 1]
         # normalized_depth_hwc = rearrange(normalized_depth_chw, 'c h w -> h w c')
 
         return normalized_depth
