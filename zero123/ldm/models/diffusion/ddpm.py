@@ -497,6 +497,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
                  scale_factor=1.0,
                  scale_by_std=False,
                  unet_trainable=True,
+                 condition_dropout=0.05,
                  *args, **kwargs):
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
@@ -512,6 +513,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
         self.concat_mode = concat_mode
         self.cond_stage_trainable = cond_stage_trainable
         self.unet_trainable = unet_trainable
+        self.condition_dropout = condition_dropout
         self.cond_stage_key = cond_stage_key
         try:
             self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
@@ -794,7 +796,10 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
     #     return out
     @torch.no_grad() #MJ: get_input method is modified from the standard get_input of LatentDiffusion to handle the relative camera pose T
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False,
-                  cond_key=None, return_original_cond=False, bs=None, uncond=0.05):
+                  cond_key=None, return_original_cond=False, bs=None):
+                  #cond_key=None, return_original_cond=False, bs=None, uncond=False):
+                  # uncond removed by JA: To allow for customization in the config file, I moved the
+                  # uncond value initialization to the __init__ function and named it condition_dropout
         
         x = super().get_input(batch, k) # JA: k is key and x is the target image
         T = batch['T'].to(memory_format=torch.contiguous_format).float()
@@ -814,8 +819,8 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
 
         # To support classifier-free guidance, randomly drop out only text conditioning (c_crossattn / image-cond and RT) 5%, only image conditioning (c_concat / image-cond) 5%, and both 5%.
         random = torch.rand(x.size(0), device=x.device)
-        prompt_mask = rearrange(random < 2 * uncond, "n -> n 1 1")  #MJ: uncond = 0.05 = 5%; 0< random < 0.05*2
-        input_mask = 1 - rearrange((random >= uncond).float() * (random < 3 * uncond).float(), "n -> n 1 1 1") # 0.05 < random < 3*0.05
+        prompt_mask = rearrange(random < 2 * self.condition_dropout, "n -> n 1 1")  #MJ: condition_dropout = 0.05 = 5%; 0< random < 0.05*2
+        input_mask = 1 - rearrange((random >= self.condition_dropout).float() * (random < 3 * self.condition_dropout).float(), "n -> n 1 1 1") # 0.05 < random < 3*0.05
         null_prompt = self.get_learned_conditioning([""])
 
         # z.shape: [8, 4, 64, 64]; c.shape: [8, 1, 768]

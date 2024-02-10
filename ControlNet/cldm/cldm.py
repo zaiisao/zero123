@@ -2,6 +2,7 @@ import einops
 import torch
 import torch as th
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
 
 from ldm.modules.diffusionmodules.util import (
     conv_nd,
@@ -539,6 +540,21 @@ class ControlLDM(LatentDiffusion):
             params += list(self.model.diffusion_model.output_blocks.parameters())
             params += list(self.model.diffusion_model.out.parameters())
         opt = torch.optim.AdamW(params, lr=lr)
+
+        if self.use_scheduler:  # JA: This part is normally not in ControlLDM, but I restored it
+                                # from the LatentDiffusion.configure_optimizers function
+            assert 'target' in self.scheduler_config
+            scheduler = instantiate_from_config(self.scheduler_config)
+
+            print("Setting up LambdaLR scheduler...")
+            scheduler = [
+                {
+                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                    'interval': 'step',
+                    'frequency': 1
+                }]
+            return [opt], scheduler
+
         return opt
 
     def low_vram_shift(self, is_diffusing):

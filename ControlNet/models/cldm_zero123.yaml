@@ -19,14 +19,16 @@ model:
     # use_ema: False # JA: use_ema is deleted from ControlNet config because Zero123 latent diffusion does not use it
     only_mid_control: False # Added by JA
 
-    # scheduler_config: # 10000 warmup steps
-    #   target: ldm.lr_scheduler.LambdaLinearScheduler
-    #   params:
-    #     warm_up_steps: [ 100 ]
-    #     cycle_lengths: [ 10000000000000 ] # incredibly large number to prevent corner cases
-    #     f_start: [ 1.e-6 ]
-    #     f_max: [ 1. ]
-    #     f_min: [ 1. ]
+    condition_dropout: 0.15
+
+    scheduler_config: # 10000 warmup steps
+      target: ldm.lr_scheduler.LambdaLinearScheduler
+      params:
+        warm_up_steps: [ 100 ]
+        cycle_lengths: [ 10000000000000 ] # incredibly large number to prevent corner cases
+        f_start: [ 1.e-6 ]
+        f_max: [ 1. ]
+        f_min: [ 1. ]
 
     control_stage_config:
       target: cldm.cldm.ControlNet
