@@ -817,8 +817,11 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             xc = xc[:bs]
         cond = {}
 
-        # To support classifier-free guidance, randomly drop out only text conditioning (c_crossattn / image-cond and RT) 5%, only image conditioning (c_concat / image-cond) 5%, and both 5%.
-        random = torch.rand(x.size(0), device=x.device)
+        # To support classifier-free guidance, randomly drop out only text conditioning (c_crossattn /
+        # image-cond and RT) 5%, only image conditioning (c_concat / image-cond) 5%, and both 5%.
+        random = torch.rand(x.size(0), device=x.device) # JA: x.size(0) is 32, which is the batch size. random is 32-vector
+
+        # JA: (random < 2 * self.condition_dropout) is a boolean tensor
         prompt_mask = rearrange(random < 2 * self.condition_dropout, "n -> n 1 1")  #MJ: condition_dropout = 0.05 = 5%; 0< random < 0.05*2
         input_mask = 1 - rearrange((random >= self.condition_dropout).float() * (random < 3 * self.condition_dropout).float(), "n -> n 1 1 1") # 0.05 < random < 3*0.05
         null_prompt = self.get_learned_conditioning([""])
@@ -829,7 +832,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             clip_emb = self.get_learned_conditioning(xc).detach()
             null_prompt = self.get_learned_conditioning([""]).detach()
             cond["c_crossattn"] = [self.cc_projection(torch.cat([torch.where(prompt_mask, null_prompt, clip_emb), T[:, None, :]], dim=-1))]
-            
+        # JA: In order to do dropout training, we set the concatenation condition to 0 if the random number is between 0.15 and 0.45
         cond["c_concat"] = [input_mask * self.encode_first_stage((xc.to(self.device))).mode().detach()]
         out = [z, cond] # JA: z is a tensor, and cond is a dictionary. cond["c_crossattn"] and cond["c_concat"] are lists of one tensor each
        
@@ -838,7 +841,7 @@ class LatentDiffusion(DDPM): # JA This is the latent diffusion class defined by 
             out.extend([x, xrec])
         if return_original_cond: # JA: This is false in our experiment
             out.append(xc)
-        return out
+        return out, random
 
     # @torch.no_grad()
     def decode_first_stage(self, z, predict_cids=False, force_not_quantize=False):

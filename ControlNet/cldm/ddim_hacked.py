@@ -185,10 +185,14 @@ class DDIMSampler(object):
         b, *_, device = *x.shape, x.device
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
-            model_output = self.model.apply_model(x, t, c)
+            model_output = self.model.apply_model(x, t, c) # JA: c has c_crossattn, c_concat, c_control
         else:
             model_t = self.model.apply_model(x, t, c)
             model_uncond = self.model.apply_model(x, t, unconditional_conditioning)
+                            # JA: unconditional_conditioning has c_crossattn-uncond, c_concat-uncond, c_control-uncond
+                            # We separate conditional generation and unconditional generation because the concatenating uncond and
+                            # cond raises a type mismatch error because cond can contain None value for c_control and None is not
+                            # a tensor
             model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
 
         if self.model.parameterization == "v":

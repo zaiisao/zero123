@@ -21,7 +21,7 @@ resume_path = '../ControlNet/models/control-zero123-xl.ckpt' # '../ControlNet/mo
 config_path = './models/cldm_zero123.yaml'
 # batch_size = 64
 logger_freq = 300
-learning_rate = 5e-5
+learning_rate = 1e-5
 sd_locked = True
 only_mid_control = False
 image_transforms_size = 256
@@ -65,7 +65,8 @@ if __name__ == '__main__':
 
     checkpoint_callback = ModelCheckpoint(
         verbose=True,
-        monitor='val/loss'#,
+        monitor='val/loss',
+        save_top_k=5
         # mode='max' # Commented by JA: ModelCheckpoint sets mode as 'min' by default, which is to be used when saving checkpoints based on loss
     )
 

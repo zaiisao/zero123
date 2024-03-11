@@ -289,11 +289,13 @@ class ObjaverseData(Dataset):
         replace background pixel with random color in rendering
         '''
         try:
-            img = plt.imread(path)
+            img = plt.imread(path) # JA: Image at the path is the RGBA image
         except:
             print(path)
             sys.exit()
-        img[img[:, :, -1] == 0.] = color
+        img[img[:, :, -1] == 0.] = color    # JA: Replace the transparent background with opaque white color.
+                                            # color is opaque white color (1, 1, 1, 1).
+                                            # Where the pixels are fully transparent, set the color to opaque white.
         img = Image.fromarray(np.uint8(img[:, :, :3] * 255.))
         return img
 
@@ -328,7 +330,7 @@ class ObjaverseData(Dataset):
         if self.return_paths:
             data["path"] = str(filename)
         
-        color = [1., 1., 1., 1.]
+        color = [1., 1., 1., 1.] # JA: This is the white color
 
         try:
             target_im = self.process_im(self.load_im(os.path.join(filename, '%03d.png' % index_target), color))

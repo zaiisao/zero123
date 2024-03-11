@@ -88,7 +88,8 @@ scene.cycles.transparent_max_bounces = 3
 scene.cycles.transmission_bounces = 3
 scene.cycles.filter_width = 0.01
 scene.cycles.use_denoising = True
-scene.render.film_transparent = True
+scene.render.film_transparent = True    # JA: This causes Blender to render the image with a transparent background
+                                        # The regions of the image which are not transparent represent the objects
 
 bpy.context.preferences.addons["cycles"].preferences.get_devices()
 # Set the device_type

@@ -527,7 +527,7 @@ def calc_cam_cone_pts_3d(polar_deg, azimuth_deg, radius_m, fov_deg):
 
 def run_demo(
         device_idx=_GPU_INDEX,
-        ckpt='/home/jaehoon/repos/zero123/ControlNet/lightning_logs/version_98/checkpoints/epoch=19-step=12719.ckpt',
+        ckpt='/home/jaehoon/repos/TEXTureWithZero123/src/zero123/control_zero123.ckpt',
         #ckpt='/home/jaehoon/repos/zero123/ControlNet/lightning_logs/version_70/checkpoints/epoch=35-step=6299.ckpt',
         config='/home/jaehoon/repos/zero123/ControlNet/models/cldm_zero123.yaml'):
 
