@@ -82,7 +82,7 @@ def load_model_from_config(config, ckpt, device, verbose=False):
 
 @torch.no_grad()
 def sample_model(input_im, depth_map_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale,
-                 ddim_eta, x, y, z, guess_mode): # JA: h, w are each fixed as 256
+                 ddim_eta, x, y, z): # JA: h, w are each fixed as 256
     precision_scope = autocast if precision == 'autocast' else nullcontext
     with precision_scope('cuda'):
         with model.ema_scope():
@@ -135,7 +135,9 @@ def sample_model(input_im, depth_map_im, model, sampler, precision, h, w, ddim_s
                 uc = {} # JA: uc means unconditional conditioning
                 uc['c_concat'] = [torch.zeros(n_samples, 4, h // 8, w // 8).to(c.device)] # # JA: h, w are each fixed as 256
                 uc['c_crossattn'] = [torch.zeros_like(c).to(c.device)]
-                uc['c_control'] = None if guess_mode else [control] # JA: We will not use guess_mode, so that uc['c_control'] will be [control].
+
+                # uc['c_control'] = None if guess_mode else [control]
+                uc['c_control'] = [torch.zeros_like(control).to(control.device)]
 
                 # JA: From gradio_depth2image.py:
                 #
@@ -371,7 +373,7 @@ def preprocess_image(models, input_im, preprocess):
 def main_run(models, device, cam_vis, return_what,
              x=0.0, y=0.0, z=0.0,
              raw_im=None, depth_map=None, preprocess=True,
-             scale=3.0, n_samples=4, ddim_steps=50, guess_mode=False, ddim_eta=1.0,
+             scale=3.0, n_samples=4, ddim_steps=50, ddim_eta=1.0,
              precision='fp32', h=256, w=256):
     '''
     :param raw_im (PIL Image).
@@ -444,7 +446,7 @@ def main_run(models, device, cam_vis, return_what,
         used_x = x  # NOTE: Set this way for consistency.
         
         x_samples_ddim = sample_model(input_im, depth_map, models['turncam'], sampler, precision, h, w,
-                                      ddim_steps, n_samples, scale, ddim_eta, used_x, y, z, guess_mode)
+                                      ddim_steps, n_samples, scale, ddim_eta, used_x, y, z)
 
         output_ims = []
         for x_sample in x_samples_ddim:
@@ -583,7 +585,6 @@ def run_demo(
                                        label='Depth image of post-rotation')
                 preprocess_chk = gr.Checkbox(
                     True, label='Preprocess image automatically (remove background and recenter object)')
-                guess_mode = gr.Checkbox(label='Guess Mode', value=False)
 
                 # info='If enabled, the uploaded image will be preprocessed to remove the background and recenter the object by cropping and/or padding as necessary. '
                 # 'If disabled, the image will be used as-is, *BUT* a fully transparent or white background is required.'),
@@ -692,12 +693,12 @@ def run_demo(
         run_btn.click(fn=partial(main_run, models, device, cam_vis, 'gen'),
                       inputs=[polar_slider, azimuth_slider, radius_slider,
                               image_block, depth_block, preprocess_chk,
-                              scale_slider, samples_slider, steps_slider, guess_mode],
+                              scale_slider, samples_slider, steps_slider],
                       outputs=[desc_output, vis_output, preproc_output, gen_output])
 
         # NEW:
         preset_inputs = [image_block, depth_block, preprocess_chk,
-                         scale_slider, samples_slider, steps_slider, guess_mode]
+                         scale_slider, samples_slider, steps_slider]
         preset_outputs = [polar_slider, azimuth_slider, radius_slider,
                           desc_output, vis_output, preproc_output, gen_output]
         left_btn.click(fn=partial(main_run, models, device, cam_vis, 'angles_gen',
